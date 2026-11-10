@@ -1,0 +1,330 @@
+:root {
+    --wh40k-bg: #12161c;
+    --wh40k-bg-elevated: #1a212b;
+    --wh40k-panel: #222b38;
+    --wh40k-border: #334155;
+    --wh40k-text: #e8eef7;
+    --wh40k-muted: #9aa8bc;
+    --wh40k-accent: #c45c26;
+    --wh40k-accent-2: #3d8b6e;
+    --wh40k-danger: #b33a3a;
+    --wh40k-warn: #c9a227;
+    --wh40k-font-display: "Segoe UI", "Trebuchet MS", sans-serif;
+    --wh40k-font-body: "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.wh40k-app {
+    min-height: calc(100vh - 46px);
+    background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(196, 92, 38, 0.18), transparent 60%),
+        radial-gradient(900px 500px at 100% 0%, rgba(61, 139, 110, 0.12), transparent 55%),
+        linear-gradient(180deg, #0e1319 0%, var(--wh40k-bg) 40%, #0b0f14 100%);
+    color: var(--wh40k-text);
+    font-family: var(--wh40k-font-body);
+    padding: 1rem;
+    box-sizing: border-box;
+}
+
+.wh40k-app * {
+    box-sizing: border-box;
+}
+
+.wh40k-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    animation: wh40k-fade-up 0.45s ease-out;
+}
+
+.wh40k-brand {
+    font-family: var(--wh40k-font-display);
+    font-size: clamp(1.4rem, 4vw, 2rem);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin: 0;
+}
+
+.wh40k-brand span {
+    color: var(--wh40k-accent);
+}
+
+.wh40k-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.wh40k-btn {
+    appearance: none;
+    border: 1px solid var(--wh40k-border);
+    background: var(--wh40k-panel);
+    color: var(--wh40k-text);
+    padding: 0.55rem 0.9rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.92rem;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.wh40k-btn:hover {
+    transform: translateY(-1px);
+    border-color: var(--wh40k-accent);
+}
+
+.wh40k-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.wh40k-btn-primary {
+    background: var(--wh40k-accent);
+    border-color: var(--wh40k-accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+.wh40k-btn-success {
+    background: var(--wh40k-accent-2);
+    border-color: var(--wh40k-accent-2);
+    color: #fff;
+}
+
+.wh40k-btn-danger {
+    background: var(--wh40k-danger);
+    border-color: var(--wh40k-danger);
+    color: #fff;
+}
+
+.wh40k-panel {
+    background: rgba(26, 33, 43, 0.92);
+    border: 1px solid var(--wh40k-border);
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    animation: wh40k-fade-up 0.5s ease-out;
+}
+
+.wh40k-panel h2,
+.wh40k-panel h3 {
+    margin: 0 0 0.75rem;
+    font-family: var(--wh40k-font-display);
+    letter-spacing: 0.03em;
+}
+
+.wh40k-muted {
+    color: var(--wh40k-muted);
+}
+
+.wh40k-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 0.75rem;
+}
+
+.wh40k-stat {
+    background: var(--wh40k-bg-elevated);
+    border: 1px solid var(--wh40k-border);
+    border-radius: 4px;
+    padding: 0.75rem;
+    text-align: center;
+}
+
+.wh40k-stat .value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--wh40k-accent);
+}
+
+.wh40k-stat .label {
+    font-size: 0.75rem;
+    color: var(--wh40k-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.wh40k-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.wh40k-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 0.8rem;
+    background: var(--wh40k-bg-elevated);
+    border: 1px solid var(--wh40k-border);
+    border-radius: 4px;
+}
+
+.wh40k-list-item.selected {
+    border-color: var(--wh40k-accent);
+    box-shadow: inset 0 0 0 1px rgba(196, 92, 38, 0.35);
+}
+
+.wh40k-error {
+    background: rgba(179, 58, 58, 0.15);
+    border: 1px solid var(--wh40k-danger);
+    color: #f0c4c4;
+    padding: 0.75rem 0.9rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.wh40k-input,
+.wh40k-select,
+.wh40k-file {
+    width: 100%;
+    background: var(--wh40k-bg);
+    border: 1px solid var(--wh40k-border);
+    color: var(--wh40k-text);
+    border-radius: 4px;
+    padding: 0.55rem 0.7rem;
+    margin-bottom: 0.75rem;
+}
+
+.wh40k-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.wh40k-qr {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+}
+
+.wh40k-qr img {
+    width: min(260px, 80vw);
+    height: auto;
+    background: #fff;
+    padding: 0.5rem;
+    border-radius: 4px;
+}
+
+.wh40k-game {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+}
+
+@media (min-width: 900px) {
+    .wh40k-game {
+        grid-template-columns: 1fr 1fr;
+    }
+    .wh40k-game-rules {
+        grid-column: 1 / -1;
+    }
+}
+
+.wh40k-side-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.wh40k-unit-card {
+    background: var(--wh40k-bg-elevated);
+    border: 1px solid var(--wh40k-border);
+    border-radius: 4px;
+    padding: 0.7rem;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.15s ease, opacity 0.2s ease;
+    touch-action: pan-y;
+}
+
+.wh40k-unit-card.destroyed {
+    opacity: 0.45;
+    border-color: var(--wh40k-danger);
+}
+
+.wh40k-unit-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+}
+
+.wh40k-unit-actions .wh40k-btn {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.8rem;
+}
+
+.wh40k-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+    animation: wh40k-fade 0.2s ease-out;
+}
+
+@media (min-width: 720px) {
+    .wh40k-modal-backdrop {
+        align-items: center;
+    }
+}
+
+.wh40k-modal {
+    width: min(640px, 100%);
+    max-height: 85vh;
+    overflow: auto;
+    background: var(--wh40k-bg-elevated);
+    border: 1px solid var(--wh40k-border);
+    border-radius: 6px;
+    padding: 1rem;
+    animation: wh40k-fade-up 0.25s ease-out;
+}
+
+.wh40k-modal table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin: 0.5rem 0;
+}
+
+.wh40k-modal th,
+.wh40k-modal td {
+    border-bottom: 1px solid var(--wh40k-border);
+    padding: 0.35rem 0.4rem;
+    text-align: left;
+}
+
+.wh40k-swipe-hint {
+    font-size: 0.75rem;
+    color: var(--wh40k-muted);
+}
+
+@keyframes wh40k-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes wh40k-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}

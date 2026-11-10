@@ -1,0 +1,13 @@
+{
+  "odpm_version": "4.0",
+  "odoo_version": "20.0",
+  "python_version": "3.14",
+  "distro_name": "debian",
+  "distro_version": "13",
+  "postgres_version": "18",
+  "dependencies": [],
+  "requirements_txt": [],
+  "odoo_build_date": "latest",
+  "odoo_git_link": "https://github.com/odoo/odoo.git",
+  "platform_name": "odoo"
+}

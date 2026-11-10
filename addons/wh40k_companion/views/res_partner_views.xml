@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_partner_form_wh40k" model="ir.ui.view">
+        <field name="name">res.partner.form.wh40k</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <notebook position="inside">
+                <page string="WH40k" name="wh40k">
+                    <group>
+                        <group>
+                            <field name="wh40k_nickname"/>
+                            <field name="wh40k_wins"/>
+                            <field name="wh40k_losses"/>
+                        </group>
+                        <group>
+                            <field name="wh40k_total_match"/>
+                            <field name="wh40k_win_rate"/>
+                        </group>
+                    </group>
+                    <field name="wh40k_roster_ids">
+                        <list>
+                            <field name="name"/>
+                            <field name="game_system"/>
+                            <field name="points_used"/>
+                            <field name="points_limit"/>
+                        </list>
+                    </field>
+                </page>
+            </notebook>
+        </field>
+    </record>
+</odoo>

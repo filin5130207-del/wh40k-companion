@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_wh40k_match_list" model="ir.ui.view">
+        <field name="name">wh40k.match.list</field>
+        <field name="model">wh40k.match</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="host_id"/>
+                <field name="guest_id"/>
+                <field name="points"/>
+                <field name="mission_id"/>
+                <field name="state"/>
+                <field name="winner_id"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_wh40k_match_form" model="ir.ui.view">
+        <field name="name">wh40k.match.form</field>
+        <field name="model">wh40k.match</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_publish" type="object" string="Publish" invisible="state != 'draft'" class="btn-primary"/>
+                    <button name="action_cancel" type="object" string="Cancel" invisible="state in ('finished', 'cancelled')"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,waiting,selecting,active,finished"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="host_id"/>
+                            <field name="host_roster_id"/>
+                            <field name="guest_id"/>
+                            <field name="guest_roster_id"/>
+                        </group>
+                        <group>
+                            <field name="points"/>
+                            <field name="mission_id"/>
+                            <field name="match_token"/>
+                            <field name="winner_id"/>
+                            <field name="published_at"/>
+                            <field name="finished_at"/>
+                        </group>
+                    </group>
+                    <group string="Unit State">
+                        <field name="unit_state" nolabel="1" colspan="2"/>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_wh40k_match" model="ir.actions.act_window">
+        <field name="name">Matches</field>
+        <field name="res_model">wh40k.match</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>
