@@ -25,6 +25,23 @@
     box-sizing: border-box;
 }
 
+/*
+ * Odoo backend client actions sit under .o_action_manager with a fixed
+ * viewport height and overflow:hidden. Without an inner scroll pane, long
+ * Battle App screens (import preview, game units, waiting) are clipped and
+ * cannot scroll with wheel, trackpad, or touch.
+ */
+.o_action_manager > .wh40k-app.o_wh40k_companion {
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+}
+
 .wh40k-app * {
     box-sizing: border-box;
 }
