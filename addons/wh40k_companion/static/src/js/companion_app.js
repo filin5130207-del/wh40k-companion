@@ -123,7 +123,11 @@ export class Wh40kCompanionApp extends Component {
 
     get qrImageUrl() {
         const url = this.state.waiting.join_url || "";
-        return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(url)}`;
+        if (!url) {
+            return "";
+        }
+        // Same-origin proxy — browsers on locked-down networks often block QR CDNs.
+        return `/wh40k/qr.png?size=260&data=${encodeURIComponent(url)}`;
     }
 
     get countdownLabel() {

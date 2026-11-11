@@ -228,6 +228,8 @@
 .wh40k-qr img {
     width: min(260px, 80vw);
     height: auto;
+    min-height: 180px;
+    object-fit: contain;
     background: #fff;
     padding: 0.5rem;
     border-radius: 4px;

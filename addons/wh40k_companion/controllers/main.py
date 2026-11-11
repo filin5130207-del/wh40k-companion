@@ -23,6 +23,26 @@ class Wh40kCompanionController(http.Controller):
         _logger.exception("WH40k companion error")
         return {"ok": False, "error": str(exc)}
 
+    def _public_base_url(self):
+        """Prefer a non-loopback host so QR/join links work on LAN phones."""
+        icp = request.env["ir.config_parameter"].sudo()
+        configured = (icp.get_str("web.base.url") or "").rstrip("/")
+        host_url = (request.httprequest.url_root or "").rstrip("/")
+
+        def _is_loopback(url):
+            low = (url or "").lower()
+            return (
+                "://127.0.0.1" in low
+                or "://localhost" in low
+                or "://[::1]" in low
+            )
+
+        if host_url and not _is_loopback(host_url):
+            return host_url
+        if configured and not _is_loopback(configured):
+            return configured
+        return host_url or configured
+
     def _parse_roster_payload(self, roster_json=None, **kwargs):
         if roster_json is None:
             roster_json = kwargs.get("params", {}).get("roster_json") if kwargs else None
@@ -387,7 +407,7 @@ class Wh40kCompanionController(http.Controller):
             if not match.exists() or match.host_id.id != partner.id:
                 raise UserError("Match not found.")
             match.action_publish()
-            join_url = match.get_join_url()
+            join_url = match.get_join_url(base_url=self._public_base_url())
             expires_at = match.waiting_expires_at()
             return {
                 "ok": True,
@@ -568,7 +588,9 @@ class Wh40kCompanionController(http.Controller):
                     "state": match.state,
                     "points": match.points,
                     "match_token": match.match_token,
-                    "join_url": match.get_join_url() if match.state == "waiting" else None,
+                    "join_url": match.get_join_url(base_url=self._public_base_url())
+                    if match.state == "waiting"
+                    else None,
                     "published_at": fields.Datetime.to_string(match.published_at)
                     if match.published_at
                     else None,
@@ -732,6 +754,46 @@ class Wh40kCompanionController(http.Controller):
             }
         except Exception as exc:
             return self._error(exc)
+
+    @http.route(
+        "/wh40k/qr.png",
+        type="http",
+        auth="public",
+        methods=["GET"],
+        csrf=False,
+        website=False,
+        sitemap=False,
+    )
+    def qr_png(self, data="", size="260", **kwargs):
+        """Same-origin QR image so waiting UI does not depend on browser egress to QR CDNs."""
+        import urllib.parse
+        import urllib.request
+
+        payload = (data or "").strip()
+        if not payload or len(payload) > 2048:
+            return request.not_found()
+        try:
+            size_i = max(80, min(512, int(size or 260)))
+        except (TypeError, ValueError):
+            size_i = 260
+        upstream = (
+            "https://api.qrserver.com/v1/create-qr-code/"
+            f"?size={size_i}x{size_i}&margin=1&data={urllib.parse.quote(payload)}"
+        )
+        try:
+            with urllib.request.urlopen(upstream, timeout=10) as resp:
+                content = resp.read()
+                ctype = resp.headers.get("Content-Type", "image/png")
+        except Exception:
+            _logger.exception("QR proxy fetch failed")
+            return request.not_found()
+        return request.make_response(
+            content,
+            headers=[
+                ("Content-Type", ctype),
+                ("Cache-Control", "public, max-age=60"),
+            ],
+        )
 
     @http.route(
         "/wh40k/join/<string:match_token>",
