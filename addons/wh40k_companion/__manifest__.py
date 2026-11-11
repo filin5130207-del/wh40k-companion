@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.2.0",
+    "version": "20.0.1.3.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,8 +11,9 @@ create matches with QR join codes, and track wounds during games.
 """,
     "author": "WH40k Companion",
     "license": "LGPL-3",
-    "depends": ["base", "web", "mail"],
+    "depends": ["base", "web", "mail", "auth_signup"],
     "data": [
+        "security/wh40k_security.xml",
         "security/ir.access.csv",
         "data/mission_data.xml",
         "data/ir_cron_data.xml",
@@ -31,6 +32,7 @@ create matches with QR join codes, and track wounds during games.
             "wh40k_companion/static/src/xml/companion_templates.xml",
         ],
     },
+    "post_init_hook": "post_init_hook",
     "application": True,
     "installable": True,
 }

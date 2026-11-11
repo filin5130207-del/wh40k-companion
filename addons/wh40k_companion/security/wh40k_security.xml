@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record model="ir.module.category" id="module_category_wh40k">
+        <field name="name">WH40k Companion</field>
+        <field name="sequence">25</field>
+    </record>
+
+    <record model="res.groups.privilege" id="res_groups_privilege_wh40k">
+        <field name="name">Battle Companion</field>
+        <field name="sequence">10</field>
+        <field name="category_id" ref="module_category_wh40k"/>
+    </record>
+
+    <record id="group_player" model="res.groups">
+        <field name="name">Player</field>
+        <field name="sequence">10</field>
+        <field name="comment">Can open Battle App, import rosters, and join/host matches.</field>
+        <field name="privilege_id" ref="res_groups_privilege_wh40k"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        <field name="user_ids" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+    </record>
+</odoo>

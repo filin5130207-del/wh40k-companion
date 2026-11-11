@@ -20,7 +20,7 @@
                     <div t-if="message" class="wh40k-muted" t-out="message"/>
                     <div class="wh40k-row">
                         <a class="wh40k-btn wh40k-btn-primary" href="/wh40k/signup">Зарегистрироваться</a>
-                        <a class="wh40k-btn" href="/web/login">Войти</a>
+                        <a class="wh40k-btn" href="/web/login?redirect=/wh40k/app">Войти</a>
                     </div>
                 </section>
             </div>

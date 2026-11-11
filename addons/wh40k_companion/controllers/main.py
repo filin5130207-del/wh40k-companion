@@ -5,6 +5,7 @@ import re
 from odoo import fields, http
 from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.http import request
+from odoo.http.session import authenticate
 
 from ..parsers.battlescribe_parser import BattlescribeParser
 
@@ -93,18 +94,31 @@ class Wh40kCompanionController(http.Controller):
                 Partner = request.env["res.partner"].sudo()
                 if Partner.search([("wh40k_nickname", "=", nickname)], limit=1):
                     raise UserError("This nickname is already taken.")
-                group_user = request.env.ref("base.group_user")
+                group_player = request.env.ref("wh40k_companion.group_player")
+                action = request.env.ref(
+                    "wh40k_companion.action_wh40k_companion_client",
+                    raise_if_not_found=False,
+                )
                 user = Users.with_context(no_reset_password=True).create(
                     {
                         "name": nickname,
                         "login": email,
                         "email": email,
                         "password": password,
-                        "group_ids": [(6, 0, [group_user.id])],
+                        # Dedicated app group (implies base.group_user / regular tier).
+                        "group_ids": [(6, 0, [group_player.id])],
+                        "action_id": action.id if action else False,
                     }
                 )
                 user.partner_id.sudo().write({"wh40k_nickname": nickname})
-                return request.redirect("/wh40k?message=Account%20created.%20Please%20sign%20in.")
+                # Land straight in Battle App (avoid blank /odoo home or portal toast).
+                credential = {
+                    "login": email,
+                    "password": password,
+                    "type": "password",
+                }
+                authenticate(request.session, request.env, credential)
+                return request.redirect("/wh40k/app")
             except (UserError, ValidationError) as exc:
                 error = str(exc)
             except Exception as exc:
@@ -124,10 +138,12 @@ class Wh40kCompanionController(http.Controller):
         action = request.env.ref(
             "wh40k_companion.action_wh40k_companion_client", raise_if_not_found=False
         )
-        action_id = action.id if action else ""
+        if not action:
+            return request.redirect("/odoo")
         join = kwargs.get("wh40k_join") or ""
-        suffix = f"&wh40k_join={join}" if join else ""
-        return request.redirect(f"/web#action={action_id}{suffix}")
+        if join:
+            return request.redirect(f"/odoo/action-{action.id}?wh40k_join={join}")
+        return request.redirect(f"/odoo/action-{action.id}")
 
     # ------------------------------------------------------------------ roster
     @http.route("/wh40k/roster/preview", type="jsonrpc", auth="user", methods=["POST"])
@@ -803,6 +819,9 @@ class Wh40kCompanionController(http.Controller):
     )
     def join_redirect(self, match_token, **kwargs):
         """HTTP entry for QR codes — open backend companion client action."""
-        action = request.env.ref("wh40k_companion.action_wh40k_companion_client", raise_if_not_found=False)
-        action_id = action.id if action else ""
-        return request.redirect(f"/web#action={action_id}&wh40k_join={match_token}")
+        action = request.env.ref(
+            "wh40k_companion.action_wh40k_companion_client", raise_if_not_found=False
+        )
+        if not action:
+            return request.redirect("/odoo")
+        return request.redirect(f"/odoo/action-{action.id}?wh40k_join={match_token}")

@@ -1,4 +1,5 @@
 from . import res_partner
+from . import res_users
 from . import rule
 from . import ability
 from . import weapon
