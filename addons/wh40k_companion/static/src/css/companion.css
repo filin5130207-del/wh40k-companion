@@ -84,15 +84,15 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     align-items: end;
-    gap: 0;
+    gap: 0.35rem;
     /* Cancel .wh40k-app 1rem padding so the bar meets the screen edges. */
     margin-left: -1rem;
     margin-right: -1rem;
     margin-bottom: -1rem;
-    /* Labels sit above the circles; circles hug L/R/bottom (safe-area only). */
+    /* Even circle columns (not edge-stuck); bar itself pin to bottom (safe-area only). */
     padding-top: 1.25rem;
-    padding-left: env(safe-area-inset-left, 0px);
-    padding-right: env(safe-area-inset-right, 0px);
+    padding-left: calc(1rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(1rem + env(safe-area-inset-right, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
     background:
         linear-gradient(180deg, rgba(14, 19, 25, 0) 0%, rgba(14, 19, 25, 0.88) 28%, rgba(11, 15, 20, 0.97) 100%);
@@ -108,7 +108,7 @@
     width: 3.1rem;
     height: 3.1rem;
     border-radius: 50%;
-    margin: 0;
+    margin: 0 auto;
     padding: 0;
     display: flex;
     flex-direction: column;
@@ -118,18 +118,6 @@
     cursor: pointer;
     position: relative;
     transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.wh40k-bottom-nav > .wh40k-nav-circle:first-child {
-    justify-self: start;
-}
-
-.wh40k-bottom-nav > .wh40k-nav-create {
-    justify-self: center;
-}
-
-.wh40k-bottom-nav > .wh40k-nav-circle:last-child {
-    justify-self: end;
 }
 
 .wh40k-nav-circle:hover {
