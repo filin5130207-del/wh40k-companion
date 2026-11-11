@@ -82,6 +82,7 @@ export class Wh40kCompanionApp extends Component {
             oppRules: [],
             ownPaneMode: "units", // units | rules
             oppPaneMode: "units",
+            gameSide: "own", // own | opponent — only one side visible
             datasheet: null,
             showSurrenderModal: false,
             result: {
@@ -551,6 +552,9 @@ export class Wh40kCompanionApp extends Component {
         };
         this.state.ownPaneMode = "units";
         this.state.oppPaneMode = "units";
+        this.state.gameSide = "own";
+        this._swipeStartX = null;
+        this._swipeStartY = null;
         this.state.ownRules = [];
         this.state.oppRules = [];
         this.state.rules = [];
@@ -573,6 +577,49 @@ export class Wh40kCompanionApp extends Component {
             this.state.oppRules = other.roster?.rules || [];
         }
         this.setScreen("game");
+    }
+
+    setGameSide(side) {
+        this.state.gameSide = side === "opponent" ? "opponent" : "own";
+    }
+
+    onGameSwipeStart(ev) {
+        const t = ev.touches && ev.touches[0];
+        if (!t) {
+            return;
+        }
+        this._swipeStartX = t.clientX;
+        this._swipeStartY = t.clientY;
+    }
+
+    onGameSwipeEnd(ev) {
+        if (this._swipeStartX == null) {
+            return;
+        }
+        const t = ev.changedTouches && ev.changedTouches[0];
+        const startX = this._swipeStartX;
+        const startY = this._swipeStartY;
+        this._swipeStartX = null;
+        this._swipeStartY = null;
+        if (!t) {
+            return;
+        }
+        const dx = t.clientX - startX;
+        const dy = t.clientY - startY;
+        // Require a clear horizontal swipe (ignore mostly-vertical scrolls).
+        if (Math.abs(dx) < 56 || Math.abs(dx) <= Math.abs(dy) * 1.15) {
+            return;
+        }
+        if (dx < 0) {
+            this.setGameSide("opponent");
+        } else {
+            this.setGameSide("own");
+        }
+    }
+
+    onGameSwipeCancel() {
+        this._swipeStartX = null;
+        this._swipeStartY = null;
     }
 
     toggleOwnPaneMode() {

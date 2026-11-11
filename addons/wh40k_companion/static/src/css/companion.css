@@ -236,20 +236,102 @@
 }
 
 .wh40k-game {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
 }
 
-@media (min-width: 900px) {
-    .wh40k-game {
-        grid-template-columns: 1fr 1fr;
-        align-items: start;
-    }
+.wh40k-game-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+}
+
+.wh40k-game-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+}
+
+.wh40k-game-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--wh40k-border);
+    border-radius: 6px;
+    background: rgba(26, 33, 43, 0.85);
+    color: var(--wh40k-text);
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    min-width: 0;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.wh40k-game-tab-label {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.wh40k-game-tab.active {
+    border-color: var(--wh40k-accent);
+    background: rgba(196, 92, 38, 0.18);
+    box-shadow: inset 0 -2px 0 var(--wh40k-accent);
+}
+
+.wh40k-game-dots {
+    display: flex;
+    justify-content: center;
+    gap: 0.4rem;
+}
+
+.wh40k-game-dot {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--wh40k-border);
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.wh40k-game-dot.active {
+    background: var(--wh40k-accent);
+    transform: scale(1.25);
+}
+
+.wh40k-game-swipe {
+    overflow: hidden;
+    width: 100%;
+    touch-action: pan-y;
+}
+
+.wh40k-game-track {
+    display: flex;
+    width: 200%;
+    transform: translateX(0);
+    transition: transform 0.28s ease-out;
+    will-change: transform;
+}
+
+.wh40k-game-track.wh40k-game-track-opp {
+    transform: translateX(-50%);
 }
 
 .wh40k-game-pane {
+    flex: 0 0 50%;
+    width: 50%;
+    min-width: 0;
     min-height: 12rem;
+    box-sizing: border-box;
+}
+
+.wh40k-swipe-hint {
+    margin-bottom: 0;
 }
 
 .wh40k-pane-heading {
