@@ -244,16 +244,73 @@
 @media (min-width: 900px) {
     .wh40k-game {
         grid-template-columns: 1fr 1fr;
+        align-items: start;
     }
-    .wh40k-game-rules {
-        grid-column: 1 / -1;
-    }
+}
+
+.wh40k-game-pane {
+    min-height: 12rem;
+}
+
+.wh40k-pane-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.wh40k-rules-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+    border-color: var(--wh40k-accent-2);
+}
+
+.wh40k-rules-toggle.active {
+    background: rgba(61, 139, 110, 0.25);
+    border-color: var(--wh40k-accent-2);
+}
+
+.wh40k-rules-icon {
+    font-weight: 700;
+    font-size: 1.05rem;
+    line-height: 1;
+    color: var(--wh40k-accent-2);
+}
+
+.wh40k-pane-rules {
+    animation: wh40k-fade 0.2s ease-out;
+}
+
+.wh40k-rule-block {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 1px solid var(--wh40k-border);
+}
+
+.wh40k-rule-block:last-child {
+    border-bottom: none;
+}
+
+.wh40k-unit-readonly {
+    cursor: pointer;
+}
+
+.wh40k-readonly-hint {
+    margin-top: 0.4rem;
+    font-size: 0.75rem;
+}
+
+.wh40k-btn-undo:disabled {
+    opacity: 0.35;
 }
 
 .wh40k-side-title {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 0.75rem;
     margin-bottom: 0.5rem;
 }
 

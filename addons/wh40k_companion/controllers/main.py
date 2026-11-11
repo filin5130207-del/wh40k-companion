@@ -648,7 +648,7 @@ class Wh40kCompanionController(http.Controller):
                 raise UserError("Match not found.")
             if partner.id not in (match.host_id.id, match.guest_id.id):
                 raise AccessError("Not a participant of this match.")
-            match.action_update_unit_state(unit_state)
+            match.action_update_unit_state(unit_state, updating_partner=partner)
             return {"ok": True}
         except Exception as exc:
             return self._error(exc)

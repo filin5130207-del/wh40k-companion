@@ -179,7 +179,7 @@
         <h2>Сканировать QR</h2>
         <t t-if="this.state.join.step === 'token'">
             <label class="wh40k-muted">Токен или ссылка из QR</label>
-            <input class="wh40k-input" t-att-value="this.state.join.token" t-on-change="this.onJoinTokenChange" placeholder="UUID token / join URL"/>
+            <input class="wh40k-input" t-att-value="this.state.join.token" t-on-input="this.onJoinTokenChange" t-on-change="this.onJoinTokenChange" placeholder="UUID token / join URL"/>
             <button class="wh40k-btn wh40k-btn-primary" t-on-click="this.verifyToken" t-att-disabled="this.state.busy">Проверить</button>
         </t>
 
@@ -226,62 +226,101 @@
             <button class="wh40k-btn wh40k-btn-danger" t-on-click="this.openSurrenderModal">Закончить матч</button>
         </div>
         <p class="wh40k-muted" t-out="this.missionName()"/>
-        <p class="wh40k-swipe-hint">Нажмите на юнит для даташита. -W / -M — раны и модели.</p>
+        <p class="wh40k-swipe-hint">Нажмите на юнит для даташита. -W / -M / Destroy — только ваш ростер. Undo откатывает последнее изменение юнита. Иконка правил переключает army/detachment правила в той же панели.</p>
     </section>
 
     <div class="wh40k-game">
-        <section class="wh40k-panel">
+        <section class="wh40k-panel wh40k-game-pane wh40k-game-pane-own" data-pane="own">
             <div class="wh40k-side-title">
-                <h3 style="margin:0;" t-out="this.ownSideLabel"/>
-                <span class="wh40k-muted">Вы</span>
-            </div>
-            <t t-foreach="this.ownUnits" t-as="unit" t-key="unit.unit_id">
-                <div class="wh40k-unit-card" t-att-class="{'destroyed': unit.destroyed}"
-                     t-on-click="() => this.openDatasheet(unit)">
-                    <strong t-out="unit.name"/>
-                    <div class="wh40k-muted" t-out="this.unitStatusLabel(unit)"/>
-                    <div class="wh40k-unit-actions">
-                        <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', -1)">-W</button>
-                        <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', 1)">+W</button>
-                        <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'models', -1)">-M</button>
-                        <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'models', 1)">+M</button>
-                        <button class="wh40k-btn wh40k-btn-danger" t-on-click.stop="() => this.destroyUnit(unit)">Destroy</button>
-                    </div>
+                <div class="wh40k-pane-heading">
+                    <h3 style="margin:0;" t-out="this.ownSideLabel"/>
+                    <span class="wh40k-muted">Вы</span>
                 </div>
+                <button type="button"
+                        class="wh40k-btn wh40k-rules-toggle"
+                        t-att-class="{'active': this.state.ownPaneMode === 'rules'}"
+                        t-att-aria-pressed="this.state.ownPaneMode === 'rules' ? 'true' : 'false'"
+                        t-att-title="this.state.ownPaneMode === 'rules' ? 'Показать ростер' : 'Правила армии'"
+                        t-on-click="this.toggleOwnPaneMode">
+                    <span class="wh40k-rules-icon" aria-hidden="true">§</span>
+                    <span t-out="this.state.ownPaneMode === 'rules' ? 'Ростер' : 'Правила'"/>
+                </button>
+            </div>
+
+            <t t-if="this.state.ownPaneMode === 'rules'">
+                <div class="wh40k-pane-rules">
+                    <t t-foreach="this.ownRules" t-as="rule" t-key="'own-' + rule.name + rule.scope">
+                        <div class="wh40k-rule-block">
+                            <strong t-out="rule.name"/>
+                            <span class="wh40k-muted" t-out="' (' + rule.scope + ')'"/>
+                            <div class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.description"/>
+                        </div>
+                    </t>
+                    <p t-if="!this.ownRules.length" class="wh40k-muted">Нет army/detachment правил для вашего ростера.</p>
+                </div>
+            </t>
+            <t t-else="">
+                <t t-foreach="this.ownUnits" t-as="unit" t-key="unit.unit_id">
+                    <div class="wh40k-unit-card" t-att-class="{'destroyed': unit.destroyed}"
+                         t-on-click="() => this.openDatasheet(unit)">
+                        <strong t-out="unit.name"/>
+                        <div class="wh40k-muted" t-out="this.unitStatusLabel(unit)"/>
+                        <div class="wh40k-unit-actions">
+                            <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', -1)">-W</button>
+                            <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', 1)">+W</button>
+                            <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'models', -1)">-M</button>
+                            <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'models', 1)">+M</button>
+                            <button class="wh40k-btn wh40k-btn-danger" t-on-click.stop="() => this.destroyUnit(unit)">Destroy</button>
+                            <button class="wh40k-btn wh40k-btn-undo"
+                                    t-att-disabled="!this.canUndo(unit)"
+                                    t-on-click.stop="() => this.undoUnit(unit)">Undo</button>
+                        </div>
+                    </div>
+                </t>
+                <p t-if="!this.ownUnits.length" class="wh40k-muted">Нет юнитов.</p>
             </t>
         </section>
 
-        <section class="wh40k-panel">
+        <section class="wh40k-panel wh40k-game-pane wh40k-game-pane-opp" data-pane="opponent">
             <div class="wh40k-side-title">
-                <h3 style="margin:0;" t-out="this.oppSideLabel"/>
-                <span class="wh40k-muted">Противник</span>
+                <div class="wh40k-pane-heading">
+                    <h3 style="margin:0;" t-out="this.oppSideLabel"/>
+                    <span class="wh40k-muted">Противник (только просмотр)</span>
+                </div>
+                <button type="button"
+                        class="wh40k-btn wh40k-rules-toggle"
+                        t-att-class="{'active': this.state.oppPaneMode === 'rules'}"
+                        t-att-aria-pressed="this.state.oppPaneMode === 'rules' ? 'true' : 'false'"
+                        t-att-title="this.state.oppPaneMode === 'rules' ? 'Показать ростер' : 'Правила армии противника'"
+                        t-on-click="this.toggleOppPaneMode">
+                    <span class="wh40k-rules-icon" aria-hidden="true">§</span>
+                    <span t-out="this.state.oppPaneMode === 'rules' ? 'Ростер' : 'Правила'"/>
+                </button>
             </div>
-            <t t-foreach="this.oppUnits" t-as="unit" t-key="unit.unit_id">
-                <div class="wh40k-unit-card" t-att-class="{'destroyed': unit.destroyed}"
-                     t-on-click="() => this.openDatasheet(unit)">
-                    <strong t-out="unit.name"/>
-                    <div class="wh40k-muted" t-out="this.unitStatusLabel(unit)"/>
-                    <div class="wh40k-unit-actions">
-                        <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', -1)">-W</button>
-                        <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', 1)">+W</button>
-                        <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'models', -1)">-M</button>
-                        <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'models', 1)">+M</button>
-                        <button class="wh40k-btn wh40k-btn-danger" t-on-click.stop="() => this.destroyUnit(unit)">Destroy</button>
-                    </div>
-                </div>
-            </t>
-        </section>
 
-        <section class="wh40k-panel wh40k-game-rules">
-            <h3>Правила</h3>
-            <t t-foreach="this.state.rules" t-as="rule" t-key="rule.name + rule.scope">
-                <div style="margin-bottom: 0.75rem;">
-                    <strong t-out="rule.name"/>
-                    <span class="wh40k-muted" t-out="' (' + rule.scope + ')'"/>
-                    <div class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.description"/>
+            <t t-if="this.state.oppPaneMode === 'rules'">
+                <div class="wh40k-pane-rules">
+                    <t t-foreach="this.oppRules" t-as="rule" t-key="'opp-' + rule.name + rule.scope">
+                        <div class="wh40k-rule-block">
+                            <strong t-out="rule.name"/>
+                            <span class="wh40k-muted" t-out="' (' + rule.scope + ')'"/>
+                            <div class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.description"/>
+                        </div>
+                    </t>
+                    <p t-if="!this.oppRules.length" class="wh40k-muted">Нет army/detachment правил у противника.</p>
                 </div>
             </t>
-            <p t-if="!this.state.rules.length" class="wh40k-muted">Нет загруженных army/detachment правил.</p>
+            <t t-else="">
+                <t t-foreach="this.oppUnits" t-as="unit" t-key="unit.unit_id">
+                    <div class="wh40k-unit-card wh40k-unit-readonly" t-att-class="{'destroyed': unit.destroyed}"
+                         t-on-click="() => this.openDatasheet(unit)">
+                        <strong t-out="unit.name"/>
+                        <div class="wh40k-muted" t-out="this.unitStatusLabel(unit)"/>
+                        <div class="wh40k-muted wh40k-readonly-hint">Даташит · без изменения состояния</div>
+                    </div>
+                </t>
+                <p t-if="!this.oppUnits.length" class="wh40k-muted">Нет юнитов противника.</p>
+            </t>
         </section>
     </div>
 

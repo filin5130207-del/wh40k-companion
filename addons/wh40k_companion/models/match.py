@@ -199,15 +199,78 @@ class Wh40kMatch(models.Model):
             "guest": side_state(guest_roster, "guest"),
         }
 
-    def action_update_unit_state(self, payload):
+    def action_update_unit_state(self, payload, updating_partner=None):
+        """Persist live unit tracking.
+
+        Players may only change their own side (host/guest unit list + undo
+        stacks for those units). Opponent side is kept from the stored state.
+        ``undo`` is a map of unit_id → list of prior snapshots (last N).
+        """
         self.ensure_one()
         if self.state != "active":
             raise UserError("Unit state can only be updated during an active match.")
         if isinstance(payload, str):
             data = json.loads(payload)
         else:
-            data = payload
-        self.unit_state = json.dumps(data)
+            data = payload or {}
+        if not isinstance(data, dict):
+            raise UserError("Invalid unit_state payload.")
+
+        try:
+            existing = json.loads(self.unit_state or "{}")
+        except json.JSONDecodeError:
+            existing = {}
+        if not isinstance(existing, dict):
+            existing = {}
+
+        partner = updating_partner
+        if partner is None:
+            partner = self.env.user.partner_id
+        if partner.id == self.host_id.id:
+            own_key, other_key = "host", "guest"
+        elif self.guest_id and partner.id == self.guest_id.id:
+            own_key, other_key = "guest", "host"
+        else:
+            raise UserError("Only match participants can update unit state.")
+
+        own_units = data.get(own_key)
+        if not isinstance(own_units, list):
+            own_units = existing.get(own_key) or []
+        other_units = existing.get(other_key) or []
+        if not isinstance(other_units, list):
+            other_units = []
+
+        own_unit_ids = {
+            str(u.get("unit_id"))
+            for u in own_units
+            if isinstance(u, dict) and u.get("unit_id") is not None
+        }
+        other_unit_ids = {
+            str(u.get("unit_id"))
+            for u in other_units
+            if isinstance(u, dict) and u.get("unit_id") is not None
+        }
+
+        existing_undo = existing.get("undo") if isinstance(existing.get("undo"), dict) else {}
+        incoming_undo = data.get("undo") if isinstance(data.get("undo"), dict) else {}
+        merged_undo = {}
+        # Keep opponent undo stacks untouched.
+        for uid, stack in existing_undo.items():
+            key = str(uid)
+            if key in other_unit_ids:
+                merged_undo[key] = stack
+        # Accept own-side undo stacks from the updater (capped later by clients).
+        for uid, stack in incoming_undo.items():
+            key = str(uid)
+            if key in own_unit_ids and isinstance(stack, list):
+                merged_undo[key] = stack[-20:]
+
+        merged = {
+            "host": own_units if own_key == "host" else other_units,
+            "guest": own_units if own_key == "guest" else other_units,
+            "undo": merged_undo,
+        }
+        self.unit_state = json.dumps(merged)
         return True
 
     def action_surrender(self, surrendering_partner):

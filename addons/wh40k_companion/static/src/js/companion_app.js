@@ -76,8 +76,12 @@ export class Wh40kCompanionApp extends Component {
                 roster_id: null,
             },
             match: null,
-            unitState: { host: [], guest: [] },
+            unitState: { host: [], guest: [], undo: {} },
             rules: [],
+            ownRules: [],
+            oppRules: [],
+            ownPaneMode: "units", // units | rules
+            oppPaneMode: "units",
             datasheet: null,
             showSurrenderModal: false,
             result: {
@@ -138,20 +142,31 @@ export class Wh40kCompanionApp extends Component {
         return `${mm}:${ss}`;
     }
 
+    static UNDO_STACK_LIMIT = 20;
+
+    get ownSideKey() {
+        if (!this.state.match) {
+            return "host";
+        }
+        return this.state.match.is_host ? "host" : "guest";
+    }
+
+    get oppSideKey() {
+        return this.ownSideKey === "host" ? "guest" : "host";
+    }
+
     get ownUnits() {
         if (!this.state.match) {
             return [];
         }
-        const side = this.state.match.is_host ? "host" : "guest";
-        return this.state.unitState[side] || [];
+        return this.state.unitState[this.ownSideKey] || [];
     }
 
     get oppUnits() {
         if (!this.state.match) {
             return [];
         }
-        const side = this.state.match.is_host ? "guest" : "host";
-        return this.state.unitState[side] || [];
+        return this.state.unitState[this.oppSideKey] || [];
     }
 
     get ownSideLabel() {
@@ -170,6 +185,14 @@ export class Wh40kCompanionApp extends Component {
         return this.state.match.is_host
             ? this.state.match.guest?.nickname || "Guest"
             : this.state.match.host?.nickname || "Host";
+    }
+
+    get ownRules() {
+        return this.state.ownRules || [];
+    }
+
+    get oppRules() {
+        return this.state.oppRules || [];
     }
 
     unitStatusLabel(unit) {
@@ -520,24 +543,95 @@ export class Wh40kCompanionApp extends Component {
     async enterGame(matchId) {
         const data = await this.rpc("/wh40k/match/state", { match_id: matchId });
         this.state.match = data.match;
-        this.state.unitState = data.match.unit_state || { host: [], guest: [] };
-        const rosterId = data.match.is_host
+        const us = data.match.unit_state || {};
+        this.state.unitState = {
+            host: us.host || [],
+            guest: us.guest || [],
+            undo: us.undo || {},
+        };
+        this.state.ownPaneMode = "units";
+        this.state.oppPaneMode = "units";
+        this.state.ownRules = [];
+        this.state.oppRules = [];
+        this.state.rules = [];
+        const ownRosterId = data.match.is_host
             ? data.match.host_roster_id
             : data.match.guest_roster_id;
-        if (rosterId) {
-            const detail = await this.rpc(`/wh40k/roster/${rosterId}/detail`);
-            this.state.rules = detail.roster?.rules || [];
-            this._rosterCache = this._rosterCache || {};
-            this._rosterCache[rosterId] = detail.roster;
-            const otherId = data.match.is_host
-                ? data.match.guest_roster_id
-                : data.match.host_roster_id;
-            if (otherId) {
-                const other = await this.rpc(`/wh40k/roster/${otherId}/detail`);
-                this._rosterCache[otherId] = other.roster;
-            }
+        const oppRosterId = data.match.is_host
+            ? data.match.guest_roster_id
+            : data.match.host_roster_id;
+        this._rosterCache = this._rosterCache || {};
+        if (ownRosterId) {
+            const detail = await this.rpc(`/wh40k/roster/${ownRosterId}/detail`);
+            this._rosterCache[ownRosterId] = detail.roster;
+            this.state.ownRules = detail.roster?.rules || [];
+            this.state.rules = this.state.ownRules;
+        }
+        if (oppRosterId) {
+            const other = await this.rpc(`/wh40k/roster/${oppRosterId}/detail`);
+            this._rosterCache[oppRosterId] = other.roster;
+            this.state.oppRules = other.roster?.rules || [];
         }
         this.setScreen("game");
+    }
+
+    toggleOwnPaneMode() {
+        this.state.ownPaneMode = this.state.ownPaneMode === "rules" ? "units" : "rules";
+    }
+
+    toggleOppPaneMode() {
+        this.state.oppPaneMode = this.state.oppPaneMode === "rules" ? "units" : "rules";
+    }
+
+    _undoKey(unit) {
+        return String(unit.unit_id);
+    }
+
+    _snapshotUnit(unit) {
+        return {
+            models_remaining: unit.models_remaining,
+            wounds_remaining: unit.wounds_remaining,
+            destroyed: !!unit.destroyed,
+        };
+    }
+
+    _cloneUnitState() {
+        return {
+            host: [...(this.state.unitState.host || [])],
+            guest: [...(this.state.unitState.guest || [])],
+            undo: { ...(this.state.unitState.undo || {}) },
+        };
+    }
+
+    _pushUndo(unit) {
+        const key = this._undoKey(unit);
+        const undo = { ...(this.state.unitState.undo || {}) };
+        const stack = [...(undo[key] || [])];
+        stack.push(this._snapshotUnit(unit));
+        if (stack.length > Wh40kCompanionApp.UNDO_STACK_LIMIT) {
+            stack.splice(0, stack.length - Wh40kCompanionApp.UNDO_STACK_LIMIT);
+        }
+        undo[key] = stack;
+        this.state.unitState = {
+            host: [...(this.state.unitState.host || [])],
+            guest: [...(this.state.unitState.guest || [])],
+            undo,
+        };
+    }
+
+    canUndo(unit) {
+        if (!unit || !this.isOwnUnit(unit)) {
+            return false;
+        }
+        const stack = (this.state.unitState.undo || {})[this._undoKey(unit)] || [];
+        return stack.length > 0;
+    }
+
+    isOwnUnit(unit) {
+        if (!unit || !this.state.match) {
+            return false;
+        }
+        return unit.side === this.ownSideKey;
     }
 
     findUnitDetail(unit) {
@@ -575,14 +669,16 @@ export class Wh40kCompanionApp extends Component {
             unit_state: {
                 host: this.state.unitState.host || [],
                 guest: this.state.unitState.guest || [],
+                undo: this.state.unitState.undo || {},
             },
         });
     }
 
     async adjustUnit(unit, field, delta) {
-        if (unit.destroyed) {
+        if (!this.isOwnUnit(unit) || unit.destroyed) {
             return;
         }
+        this._pushUndo(unit);
         if (field === "wounds") {
             unit.wounds_remaining = Math.max(0, Math.min(unit.wounds, unit.wounds_remaining + delta));
             if (unit.wounds_remaining === 0) {
@@ -598,10 +694,7 @@ export class Wh40kCompanionApp extends Component {
                 this.vibrate();
             }
         }
-        this.state.unitState = {
-            host: [...(this.state.unitState.host || [])],
-            guest: [...(this.state.unitState.guest || [])],
-        };
+        this.state.unitState = this._cloneUnitState();
         try {
             await this.persistUnitState();
         } catch (e) {
@@ -610,13 +703,45 @@ export class Wh40kCompanionApp extends Component {
     }
 
     async destroyUnit(unit) {
+        if (!this.isOwnUnit(unit) || unit.destroyed) {
+            return;
+        }
+        this._pushUndo(unit);
         unit.models_remaining = 0;
         unit.wounds_remaining = 0;
         unit.destroyed = true;
         this.vibrate();
+        this.state.unitState = this._cloneUnitState();
+        try {
+            await this.persistUnitState();
+        } catch (e) {
+            this.setError(e.message);
+        }
+    }
+
+    async undoUnit(unit) {
+        if (!this.canUndo(unit)) {
+            return;
+        }
+        const key = this._undoKey(unit);
+        const undo = { ...(this.state.unitState.undo || {}) };
+        const stack = [...(undo[key] || [])];
+        const prev = stack.pop();
+        if (!prev) {
+            return;
+        }
+        if (stack.length) {
+            undo[key] = stack;
+        } else {
+            delete undo[key];
+        }
+        unit.models_remaining = prev.models_remaining;
+        unit.wounds_remaining = prev.wounds_remaining;
+        unit.destroyed = !!prev.destroyed;
         this.state.unitState = {
             host: [...(this.state.unitState.host || [])],
             guest: [...(this.state.unitState.guest || [])],
+            undo,
         };
         try {
             await this.persistUnitState();
