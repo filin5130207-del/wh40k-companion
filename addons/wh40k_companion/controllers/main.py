@@ -1,8 +1,9 @@
 import json
 import logging
+import re
 
-from odoo import http
-from odoo.exceptions import AccessError, UserError
+from odoo import fields, http
+from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.http import request
 
 from ..parsers.battlescribe_parser import BattlescribeParser
@@ -22,20 +23,107 @@ class Wh40kCompanionController(http.Controller):
         _logger.exception("WH40k companion error")
         return {"ok": False, "error": str(exc)}
 
+    def _parse_roster_payload(self, roster_json=None, **kwargs):
+        if roster_json is None:
+            roster_json = kwargs.get("params", {}).get("roster_json") if kwargs else None
+        if not roster_json:
+            raise UserError("Missing roster_json payload.")
+        if isinstance(roster_json, str):
+            data = json.loads(roster_json)
+        else:
+            data = roster_json
+        return BattlescribeParser(data)
+
+    # ------------------------------------------------------------ public auth
+    @http.route("/wh40k", type="http", auth="public", website=False, sitemap=False)
+    def wh40k_landing(self, **kwargs):
+        return request.render(
+            "wh40k_companion.landing_page",
+            {
+                "error": kwargs.get("error"),
+                "message": kwargs.get("message"),
+            },
+        )
+
+    @http.route(
+        "/wh40k/signup",
+        type="http",
+        auth="public",
+        methods=["GET", "POST"],
+        website=False,
+        csrf=True,
+        sitemap=False,
+    )
+    def wh40k_signup(self, **post):
+        error = ""
+        if request.httprequest.method == "POST":
+            email = (post.get("email") or "").strip().lower()
+            password = post.get("password") or ""
+            nickname = (post.get("nickname") or "").strip()
+            try:
+                if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+                    raise UserError("Enter a valid email address.")
+                if len(password) < 8:
+                    raise UserError("Password must be at least 8 characters.")
+                if not nickname or len(nickname) < 3:
+                    raise UserError("Nickname must be at least 3 characters.")
+                Users = request.env["res.users"].sudo()
+                if Users.search([("login", "=", email)], limit=1):
+                    raise UserError("An account with this email already exists.")
+                Partner = request.env["res.partner"].sudo()
+                if Partner.search([("wh40k_nickname", "=", nickname)], limit=1):
+                    raise UserError("This nickname is already taken.")
+                group_user = request.env.ref("base.group_user")
+                user = Users.with_context(no_reset_password=True).create(
+                    {
+                        "name": nickname,
+                        "login": email,
+                        "email": email,
+                        "password": password,
+                        "group_ids": [(6, 0, [group_user.id])],
+                    }
+                )
+                user.partner_id.sudo().write({"wh40k_nickname": nickname})
+                return request.redirect("/wh40k?message=Account%20created.%20Please%20sign%20in.")
+            except (UserError, ValidationError) as exc:
+                error = str(exc)
+            except Exception as exc:
+                _logger.exception("WH40k signup failed")
+                error = str(exc)
+        return request.render(
+            "wh40k_companion.signup_page",
+            {
+                "error": error,
+                "email": post.get("email") or "",
+                "nickname": post.get("nickname") or "",
+            },
+        )
+
+    @http.route("/wh40k/app", type="http", auth="user", website=False)
+    def wh40k_app_redirect(self, **kwargs):
+        action = request.env.ref(
+            "wh40k_companion.action_wh40k_companion_client", raise_if_not_found=False
+        )
+        action_id = action.id if action else ""
+        join = kwargs.get("wh40k_join") or ""
+        suffix = f"&wh40k_join={join}" if join else ""
+        return request.redirect(f"/web#action={action_id}{suffix}")
+
     # ------------------------------------------------------------------ roster
+    @http.route("/wh40k/roster/preview", type="jsonrpc", auth="user", methods=["POST"])
+    def roster_preview(self, roster_json=None, **kwargs):
+        try:
+            parser = self._parse_roster_payload(roster_json=roster_json, **kwargs)
+            preview = parser.preview()
+            return {"ok": True, "preview": preview}
+        except Exception as exc:
+            return self._error(exc)
+
     @http.route("/wh40k/roster/import", type="jsonrpc", auth="user", methods=["POST"])
     def roster_import(self, roster_json=None, name=None, **kwargs):
         try:
             partner = self._partner()
-            if roster_json is None:
-                roster_json = kwargs.get("params", {}).get("roster_json") if kwargs else None
-            if not roster_json:
-                raise UserError("Missing roster_json payload.")
-            if isinstance(roster_json, str):
-                data = json.loads(roster_json)
-            else:
-                data = roster_json
-            parser = BattlescribeParser(data)
+            parser = self._parse_roster_payload(roster_json=roster_json, **kwargs)
             parsed = parser.parse()
             if name:
                 parsed["name"] = name
@@ -47,6 +135,7 @@ class Wh40kCompanionController(http.Controller):
                 "points_used": roster.points_used,
                 "points_limit": roster.points_limit,
                 "summary": parser.summary(),
+                "preview": parser.preview(),
             }
         except Exception as exc:
             return self._error(exc)
@@ -211,6 +300,7 @@ class Wh40kCompanionController(http.Controller):
                     "id": partner.id,
                     "name": partner.name,
                     "nickname": partner.wh40k_nickname or partner.name,
+                    "has_nickname": bool(partner.wh40k_nickname),
                     "wins": partner.wh40k_wins,
                     "losses": partner.wh40k_losses,
                     "total_match": partner.wh40k_total_match,
@@ -298,12 +388,18 @@ class Wh40kCompanionController(http.Controller):
                 raise UserError("Match not found.")
             match.action_publish()
             join_url = match.get_join_url()
+            expires_at = match.waiting_expires_at()
             return {
                 "ok": True,
                 "match_id": match.id,
                 "state": match.state,
                 "match_token": match.match_token,
                 "join_url": join_url,
+                "published_at": fields.Datetime.to_string(match.published_at)
+                if match.published_at
+                else None,
+                "expires_at": fields.Datetime.to_string(expires_at) if expires_at else None,
+                "waiting_seconds": match.WAITING_TIMEOUT_MINUTES * 60,
             }
         except Exception as exc:
             return self._error(exc)
@@ -316,8 +412,14 @@ class Wh40kCompanionController(http.Controller):
             )
             if not match:
                 raise UserError("Invalid match token.")
+            if match.state == "waiting" and match.is_waiting_expired():
+                match.action_cancel(reason="Таймаут ожидания противника")
+                raise UserError("Waiting timeout expired. Match was cancelled.")
             if match.state not in ("waiting", "selecting"):
                 raise UserError(f"Match is not joinable (state={match.state}).")
+            if match.guest_id and match.state == "waiting":
+                raise UserError("A guest has already joined this match.")
+            host_roster = match.host_roster_id
             return {
                 "ok": True,
                 "match_id": match.id,
@@ -333,6 +435,56 @@ class Wh40kCompanionController(http.Controller):
                     "id": match.host_id.id,
                     "nickname": match.host_id.wh40k_nickname or match.host_id.name,
                 },
+                "host_roster": {
+                    "id": host_roster.id,
+                    "name": host_roster.name,
+                    "points_used": host_roster.points_used,
+                    "faction": (
+                        host_roster.force_ids[:1].catalogue_name
+                        or host_roster.force_ids[:1].name
+                        or host_roster.game_system
+                        or ""
+                    )
+                    if host_roster.force_ids
+                    else (host_roster.game_system or ""),
+                }
+                if host_roster
+                else None,
+            }
+        except Exception as exc:
+            return self._error(exc)
+
+    @http.route("/wh40k/match/accept", type="jsonrpc", auth="user")
+    def match_accept(self, match_token=None, **kwargs):
+        try:
+            partner = self._partner()
+            match = request.env["wh40k.match"].search(
+                [("match_token", "=", match_token)], limit=1
+            )
+            if not match:
+                raise UserError("Invalid match token.")
+            match.action_accept_invite(partner)
+            limit = int(match.points)
+            rosters = request.env["wh40k.roster"].search(
+                [
+                    ("partner_id", "=", partner.id),
+                    ("points_used", "<=", limit),
+                ]
+            )
+            return {
+                "ok": True,
+                "match_id": match.id,
+                "state": match.state,
+                "points": match.points,
+                "rosters": [
+                    {
+                        "id": r.id,
+                        "name": r.name,
+                        "points_used": r.points_used,
+                        "points_limit": r.points_limit,
+                    }
+                    for r in rosters
+                ],
             }
         except Exception as exc:
             return self._error(exc)
@@ -349,9 +501,8 @@ class Wh40kCompanionController(http.Controller):
             roster = request.env["wh40k.roster"].browse(int(roster_id))
             if not roster.exists():
                 raise UserError("Invalid roster.")
-            # Move waiting → selecting when guest verifies intent, then join completes
             if match.state == "waiting":
-                match.state = "selecting"
+                match.action_accept_invite(partner)
             match.action_join(partner, roster)
             return {
                 "ok": True,
@@ -409,6 +560,7 @@ class Wh40kCompanionController(http.Controller):
                 unit_state = json.loads(match.unit_state or "{}")
             except json.JSONDecodeError:
                 unit_state = {}
+            expires_at = match.waiting_expires_at()
             return {
                 "ok": True,
                 "match": {
@@ -417,6 +569,11 @@ class Wh40kCompanionController(http.Controller):
                     "points": match.points,
                     "match_token": match.match_token,
                     "join_url": match.get_join_url() if match.state == "waiting" else None,
+                    "published_at": fields.Datetime.to_string(match.published_at)
+                    if match.published_at
+                    else None,
+                    "expires_at": fields.Datetime.to_string(expires_at) if expires_at else None,
+                    "cancel_reason": match.cancel_reason or "",
                     "mission": {
                         "id": match.mission_id.id,
                         "name": match.mission_id.name,
@@ -466,11 +623,20 @@ class Wh40kCompanionController(http.Controller):
             if not match.exists():
                 raise UserError("Match not found.")
             match.action_surrender(partner)
+            winner = match.winner_id
+            you_won = winner and winner.id == partner.id
             return {
                 "ok": True,
                 "state": match.state,
-                "winner_id": match.winner_id.id,
-                "winner_nickname": match.winner_id.wh40k_nickname or match.winner_id.name,
+                "winner_id": winner.id,
+                "winner_nickname": winner.wh40k_nickname or winner.name,
+                "you_won": bool(you_won),
+                "you_surrendered": not you_won,
+                "message": (
+                    "Победа! Противник сдался."
+                    if you_won
+                    else "Поражение. Вы сдались."
+                ),
             }
         except Exception as exc:
             return self._error(exc)
@@ -482,7 +648,7 @@ class Wh40kCompanionController(http.Controller):
             match = request.env["wh40k.match"].browse(int(match_id))
             if not match.exists() or match.host_id.id != partner.id:
                 raise UserError("Match not found.")
-            match.action_cancel()
+            match.action_cancel(reason="Отменено хостом")
             return {"ok": True, "state": match.state}
         except Exception as exc:
             return self._error(exc)

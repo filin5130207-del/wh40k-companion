@@ -16,6 +16,16 @@ function extractJoinToken() {
     return params.get("wh40k_join") || "";
 }
 
+function parseOdooDatetime(value) {
+    if (!value) {
+        return null;
+    }
+    // Odoo JSON datetimes are UTC "YYYY-MM-DD HH:MM:SS"
+    const iso = String(value).includes("T") ? String(value) : `${String(value).replace(" ", "T")}Z`;
+    const ms = Date.parse(iso);
+    return Number.isNaN(ms) ? null : ms;
+}
+
 export class Wh40kCompanionApp extends Component {
     static template = "wh40k_companion.CompanionApp";
     props = useProps({
@@ -28,6 +38,7 @@ export class Wh40kCompanionApp extends Component {
             screen: "dashboard",
             busy: false,
             error: "",
+            needsNickname: false,
             player: {
                 nickname: "",
                 wins: 0,
@@ -37,6 +48,7 @@ export class Wh40kCompanionApp extends Component {
             },
             rosters: [],
             missions: [],
+            importPreview: null,
             create: {
                 points: "2000",
                 mission_id: null,
@@ -46,11 +58,18 @@ export class Wh40kCompanionApp extends Component {
                 match_id: null,
                 join_url: "",
                 match_token: "",
+                published_at: null,
+                expires_at: null,
+                remaining_ms: 15 * 60 * 1000,
             },
             join: {
                 token: extractJoinToken(),
+                step: "token", // token | invite | selecting
                 verified: false,
                 host_nickname: "",
+                host_roster_name: "",
+                host_roster_faction: "",
+                host_roster_points: "",
                 points: "",
                 mission_name: "",
                 rosters: [],
@@ -60,28 +79,39 @@ export class Wh40kCompanionApp extends Component {
             unitState: { host: [], guest: [] },
             rules: [],
             datasheet: null,
+            showSurrenderModal: false,
             result: {
                 winner_nickname: "",
+                you_won: false,
+                you_surrendered: false,
+                message: "",
             },
             pendingRosterJson: null,
         });
         this._poll = null;
+        this._countdown = null;
 
         onWillStart(async () => {
             await this.loadDashboard();
             await this.loadMissions();
-            if (this.state.join.token) {
+            if (this.state.needsNickname) {
+                this.state.screen = "nickname";
+            } else if (this.state.join.token) {
                 this.state.screen = "join";
             }
         });
 
         onMounted(() => {
             this._poll = setInterval(() => this.pollWaiting(), 5000);
+            this._countdown = setInterval(() => this.tickCountdown(), 1000);
         });
 
         onWillUnmount(() => {
             if (this._poll) {
                 clearInterval(this._poll);
+            }
+            if (this._countdown) {
+                clearInterval(this._countdown);
             }
         });
     }
@@ -96,12 +126,20 @@ export class Wh40kCompanionApp extends Component {
         return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(url)}`;
     }
 
+    get countdownLabel() {
+        const ms = Math.max(0, this.state.waiting.remaining_ms || 0);
+        const totalSec = Math.floor(ms / 1000);
+        const mm = String(Math.floor(totalSec / 60)).padStart(2, "0");
+        const ss = String(totalSec % 60).padStart(2, "0");
+        return `${mm}:${ss}`;
+    }
+
     get ownUnits() {
         if (!this.state.match) {
             return [];
         }
         const side = this.state.match.is_host ? "host" : "guest";
-        return (this.state.unitState[side] || []);
+        return this.state.unitState[side] || [];
     }
 
     get oppUnits() {
@@ -109,7 +147,7 @@ export class Wh40kCompanionApp extends Component {
             return [];
         }
         const side = this.state.match.is_host ? "guest" : "host";
-        return (this.state.unitState[side] || []);
+        return this.state.unitState[side] || [];
     }
 
     get ownSideLabel() {
@@ -128,6 +166,42 @@ export class Wh40kCompanionApp extends Component {
         return this.state.match.is_host
             ? this.state.match.guest?.nickname || "Guest"
             : this.state.match.host?.nickname || "Host";
+    }
+
+    unitStatusLabel(unit) {
+        return (
+            "Models " +
+            unit.models_remaining +
+            "/" +
+            unit.models +
+            " | Wounds " +
+            unit.wounds_remaining +
+            "/" +
+            unit.wounds
+        );
+    }
+
+    weaponLabel(w) {
+        return (
+            " | " +
+            (w.weapon_type || "-") +
+            " | R " +
+            (w.range || "-") +
+            " | A " +
+            (w.A || "-") +
+            " | " +
+            (w.skill || "-") +
+            " | S " +
+            (w.S || "-") +
+            " | AP " +
+            (w.AP || "-") +
+            " | D " +
+            (w.D || "-")
+        );
+    }
+
+    missionName() {
+        return (this.state.match && this.state.match.mission && this.state.match.mission.name) || "";
     }
 
     setScreen(screen) {
@@ -153,6 +227,7 @@ export class Wh40kCompanionApp extends Component {
         const data = await this.rpc("/wh40k/player/dashboard");
         this.state.player = data.player;
         this.state.rosters = data.rosters || [];
+        this.state.needsNickname = !(data.player && data.player.has_nickname);
     }
 
     async loadMissions() {
@@ -172,7 +247,9 @@ export class Wh40kCompanionApp extends Component {
             this.state.busy = true;
             await this.rpc("/wh40k/player/nickname", { nickname: this.state.player.nickname });
             await this.loadDashboard();
+            this.state.needsNickname = false;
             this.state.busy = false;
+            this.setScreen("dashboard");
         } catch (e) {
             this.setError(e.message);
         }
@@ -182,21 +259,40 @@ export class Wh40kCompanionApp extends Component {
         const file = ev.target.files && ev.target.files[0];
         if (!file) {
             this.state.pendingRosterJson = null;
+            this.state.importPreview = null;
             return;
         }
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = async () => {
             try {
                 this.state.pendingRosterJson = JSON.parse(reader.result);
+                this.state.busy = true;
+                const data = await this.rpc("/wh40k/roster/preview", {
+                    roster_json: this.state.pendingRosterJson,
+                });
+                this.state.importPreview = data.preview;
+                this.state.busy = false;
+                this.setScreen("import_preview");
             } catch (e) {
-                this.setError("Invalid JSON file.");
+                this.setError(e.message || "Invalid JSON file.");
                 this.state.pendingRosterJson = null;
+                this.state.importPreview = null;
             }
         };
         reader.readAsText(file);
     }
 
-    async importRoster() {
+    cancelImportPreview() {
+        this.state.pendingRosterJson = null;
+        this.state.importPreview = null;
+        const fileInput = this.rosterFile();
+        if (fileInput) {
+            fileInput.value = "";
+        }
+        this.setScreen("dashboard");
+    }
+
+    async confirmImportRoster() {
         if (!this.state.pendingRosterJson) {
             this.setError("Choose a roster JSON file first.");
             return;
@@ -209,10 +305,12 @@ export class Wh40kCompanionApp extends Component {
             await this.loadDashboard();
             this.state.busy = false;
             this.state.pendingRosterJson = null;
+            this.state.importPreview = null;
             const fileInput = this.rosterFile();
             if (fileInput) {
                 fileInput.value = "";
             }
+            this.setScreen("dashboard");
         } catch (e) {
             this.setError(e.message);
         }
@@ -250,11 +348,31 @@ export class Wh40kCompanionApp extends Component {
                 match_id: published.match_id,
                 join_url: published.join_url,
                 match_token: published.match_token,
+                published_at: published.published_at,
+                expires_at: published.expires_at,
+                remaining_ms: (published.waiting_seconds || 900) * 1000,
             };
+            this.tickCountdown();
             this.state.busy = false;
             this.setScreen("waiting");
         } catch (e) {
             this.setError(e.message);
+        }
+    }
+
+    tickCountdown() {
+        if (this.state.screen !== "waiting") {
+            return;
+        }
+        const expiresMs = parseOdooDatetime(this.state.waiting.expires_at);
+        if (expiresMs) {
+            this.state.waiting.remaining_ms = Math.max(0, expiresMs - Date.now());
+        } else if (this.state.waiting.remaining_ms > 0) {
+            this.state.waiting.remaining_ms = Math.max(0, this.state.waiting.remaining_ms - 1000);
+        }
+        if (this.state.waiting.remaining_ms <= 0 && this.state.waiting.match_id) {
+            // Soft UX; cron / poll will cancel server-side.
+            this.state.error = "Время ожидания истекло. Матч будет отменён.";
         }
     }
 
@@ -266,14 +384,22 @@ export class Wh40kCompanionApp extends Component {
             const data = await this.rpc("/wh40k/match/state", {
                 match_id: this.state.waiting.match_id,
             });
+            if (data.match.expires_at) {
+                this.state.waiting.expires_at = data.match.expires_at;
+            }
             if (data.match.state === "active") {
                 await this.enterGame(data.match.id);
             } else if (data.match.state === "cancelled") {
-                this.setError("Match was cancelled (stale waiting timeout or host cancel).");
+                const reason = data.match.cancel_reason || "Матч отменён.";
+                this.setError(
+                    reason.includes("Таймаут")
+                        ? "Время ожидания истекло. Матч отменён."
+                        : reason
+                );
                 this.setScreen("dashboard");
             }
         } catch (e) {
-            // keep polling; surface soft errors only
+            // keep polling
         }
     }
 
@@ -317,19 +443,52 @@ export class Wh40kCompanionApp extends Component {
             const verified = await this.rpc("/wh40k/match/verify", {
                 match_token: this.state.join.token,
             });
-            const eligible = await this.rpc("/wh40k/match/eligible_rosters", {
-                match_token: this.state.join.token,
-            });
             this.state.join.verified = true;
+            this.state.join.step = "invite";
             this.state.join.host_nickname = verified.host?.nickname || "Host";
             this.state.join.points = verified.points;
             this.state.join.mission_name = verified.mission?.name || "";
-            this.state.join.rosters = eligible.rosters || [];
+            this.state.join.host_roster_name = verified.host_roster?.name || "";
+            this.state.join.host_roster_faction = verified.host_roster?.faction || "";
+            this.state.join.host_roster_points = verified.host_roster?.points_used || "";
+            this.state.join.rosters = [];
+            this.state.join.roster_id = null;
+            this.state.busy = false;
+        } catch (e) {
+            this.setError(e.message);
+        }
+    }
+
+    async acceptInvite() {
+        try {
+            this.state.busy = true;
+            const accepted = await this.rpc("/wh40k/match/accept", {
+                match_token: this.state.join.token,
+            });
+            this.state.join.step = "selecting";
+            this.state.join.rosters = accepted.rosters || [];
             this.state.join.roster_id = this.state.join.rosters[0]?.id || null;
             this.state.busy = false;
         } catch (e) {
             this.setError(e.message);
         }
+    }
+
+    declineInvite() {
+        this.state.join = {
+            token: "",
+            step: "token",
+            verified: false,
+            host_nickname: "",
+            host_roster_name: "",
+            host_roster_faction: "",
+            host_roster_points: "",
+            points: "",
+            mission_name: "",
+            rosters: [],
+            roster_id: null,
+        };
+        this.setScreen("dashboard");
     }
 
     selectGuestRoster(id) {
@@ -366,7 +525,6 @@ export class Wh40kCompanionApp extends Component {
             this.state.rules = detail.roster?.rules || [];
             this._rosterCache = this._rosterCache || {};
             this._rosterCache[rosterId] = detail.roster;
-            // Also cache opponent roster for datasheets
             const otherId = data.match.is_host
                 ? data.match.guest_roster_id
                 : data.match.host_roster_id;
@@ -436,7 +594,6 @@ export class Wh40kCompanionApp extends Component {
                 this.vibrate();
             }
         }
-        // trigger reactivity
         this.state.unitState = {
             host: [...(this.state.unitState.host || [])],
             guest: [...(this.state.unitState.guest || [])],
@@ -464,16 +621,27 @@ export class Wh40kCompanionApp extends Component {
         }
     }
 
+    openSurrenderModal() {
+        this.state.showSurrenderModal = true;
+    }
+
+    closeSurrenderModal() {
+        this.state.showSurrenderModal = false;
+    }
+
     async confirmSurrender() {
-        if (!window.confirm("Surrender this match? This cannot be undone.")) {
-            return;
-        }
         try {
             this.state.busy = true;
+            this.state.showSurrenderModal = false;
             const result = await this.rpc("/wh40k/match/surrender", {
                 match_id: this.state.match.id,
             });
-            this.state.result.winner_nickname = result.winner_nickname;
+            this.state.result = {
+                winner_nickname: result.winner_nickname,
+                you_won: !!result.you_won,
+                you_surrendered: !!result.you_surrendered,
+                message: result.message || "",
+            };
             this.state.busy = false;
             await this.loadDashboard();
             this.setScreen("result");

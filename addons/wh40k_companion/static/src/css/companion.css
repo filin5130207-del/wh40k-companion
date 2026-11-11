@@ -328,3 +328,30 @@
     from { opacity: 0; }
     to { opacity: 1; }
 }
+
+.wh40k-countdown {
+    font-family: var(--wh40k-font-display);
+    font-size: clamp(2rem, 8vw, 3.2rem);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--wh40k-warn);
+    animation: wh40k-pulse 1.4s ease-in-out infinite;
+}
+
+.wh40k-invite-card {
+    background: var(--wh40k-bg-elevated);
+    border: 1px solid var(--wh40k-accent);
+    border-radius: 6px;
+    padding: 1rem;
+    margin-top: 0.75rem;
+}
+
+.wh40k-invite-card h3 {
+    margin: 0 0 0.75rem;
+    font-family: var(--wh40k-font-display);
+}
+
+@keyframes wh40k-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.72; }
+}

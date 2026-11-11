@@ -109,6 +109,32 @@ class BattlescribeParser:
             "points_limit": parsed["points_limit"],
         }
 
+    def preview(self) -> dict[str, Any]:
+        """Lightweight preview payload for import confirmation UI."""
+        parsed = self.parse()
+        unit_names: list[str] = []
+        factions: list[str] = []
+        for force in parsed["forces"]:
+            catalogue = (force.get("catalogue_name") or "").strip()
+            force_name = (force.get("name") or "").strip()
+            faction = catalogue or force_name
+            if faction and faction not in factions:
+                factions.append(faction)
+            for det in force.get("detachments") or []:
+                for unit in det.get("units") or []:
+                    name = (unit.get("name") or "").strip()
+                    if name and name not in unit_names:
+                        unit_names.append(name)
+        return {
+            "name": parsed["name"],
+            "faction": ", ".join(factions) if factions else (parsed.get("game_system") or "Unknown"),
+            "game_system": parsed.get("game_system") or "",
+            "points_used": parsed["points_used"],
+            "points_limit": parsed["points_limit"],
+            "units": unit_names,
+            "unit_count": len(unit_names),
+        }
+
     def _parse_force(self, force: dict) -> dict:
         army_rules = []
         for rule in force.get("rules") or []:

@@ -56,6 +56,22 @@ class Wh40kMatch(models.Model):
     )
     published_at = fields.Datetime()
     finished_at = fields.Datetime()
+    cancel_reason = fields.Char(string="Cancel Reason")
+
+    WAITING_TIMEOUT_MINUTES = 15
+
+    def waiting_expires_at(self):
+        self.ensure_one()
+        if not self.published_at:
+            return False
+        return self.published_at + timedelta(minutes=self.WAITING_TIMEOUT_MINUTES)
+
+    def is_waiting_expired(self):
+        self.ensure_one()
+        expires = self.waiting_expires_at()
+        if not expires:
+            return False
+        return fields.Datetime.now() >= expires
 
     @api.depends("host_id", "guest_id", "points", "state")
     def _compute_name(self):
@@ -87,8 +103,11 @@ class Wh40kMatch(models.Model):
             )
         return True
 
-    def action_cancel(self):
-        self.write({"state": "cancelled"})
+    def action_cancel(self, reason=None):
+        vals = {"state": "cancelled"}
+        if reason:
+            vals["cancel_reason"] = reason
+        self.write(vals)
         return True
 
     def get_join_url(self, base_url=None):
@@ -104,12 +123,32 @@ class Wh40kMatch(models.Model):
             not roster.points_limit or roster.points_limit == limit or roster.points_used <= limit
         )
 
+    def action_accept_invite(self, guest_partner):
+        """Guest accepted invite card: waiting → selecting."""
+        self.ensure_one()
+        if self.is_waiting_expired():
+            self.action_cancel(reason="Таймаут ожидания противника")
+            raise UserError("Waiting timeout expired. Match was cancelled.")
+        if self.state != "waiting":
+            raise UserError("This match is not waiting for a guest.")
+        if self.guest_id:
+            raise UserError("A guest has already joined this match.")
+        if guest_partner.id == self.host_id.id:
+            raise UserError("Host cannot join as guest.")
+        self.write({"state": "selecting"})
+        return True
+
     def action_join(self, guest_partner, guest_roster):
         self.ensure_one()
+        if self.is_waiting_expired() and self.state == "waiting":
+            self.action_cancel(reason="Таймаут ожидания противника")
+            raise UserError("Waiting timeout expired. Match was cancelled.")
         if self.state not in ("waiting", "selecting"):
             raise UserError("This match is not open for joining.")
         if guest_partner.id == self.host_id.id:
             raise UserError("Host cannot join as guest.")
+        if self.guest_id and self.guest_id.id != guest_partner.id:
+            raise UserError("A guest has already joined this match.")
         if guest_roster.partner_id.id != guest_partner.id:
             raise UserError("Roster does not belong to the joining player.")
         if not self._roster_fits_points(guest_roster):
@@ -192,13 +231,14 @@ class Wh40kMatch(models.Model):
                 "finished_at": fields.Datetime.now(),
             }
         )
-        winner.action_wh40k_record_result(won=True)
-        loser.action_wh40k_record_result(won=False)
+        # Stats live on partners; participants may lack write on the opponent.
+        winner.sudo().action_wh40k_record_result(won=True)
+        loser.sudo().action_wh40k_record_result(won=False)
         return True
 
     @api.model
     def cron_cancel_stale_waiting(self):
-        cutoff = fields.Datetime.now() - timedelta(minutes=15)
+        cutoff = fields.Datetime.now() - timedelta(minutes=self.WAITING_TIMEOUT_MINUTES)
         stale = self.search(
             [
                 ("state", "=", "waiting"),
@@ -207,5 +247,10 @@ class Wh40kMatch(models.Model):
             ]
         )
         if stale:
-            stale.write({"state": "cancelled"})
+            stale.write(
+                {
+                    "state": "cancelled",
+                    "cancel_reason": "Таймаут ожидания противника",
+                }
+            )
         return True

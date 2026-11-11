@@ -41,6 +41,7 @@
                             <field name="winner_id"/>
                             <field name="published_at"/>
                             <field name="finished_at"/>
+                            <field name="cancel_reason"/>
                         </group>
                     </group>
                     <group string="Unit State">
