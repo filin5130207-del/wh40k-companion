@@ -13,7 +13,7 @@ create matches with QR join codes, and track wounds during games.
     "license": "LGPL-3",
     "depends": ["base", "web", "mail"],
     "data": [
-        "security/ir.model.access.csv",
+        "security/ir.access.csv",
         "data/mission_data.xml",
         "data/ir_cron_data.xml",
         "views/res_partner_views.xml",

@@ -1,0 +1,11 @@
+id,name,model_id,group_id/id,operation,domain
+access_wh40k_rule_user,wh40k.rule user,wh40k.rule,base.group_user,crud,
+access_wh40k_ability_user,wh40k.ability user,wh40k.ability,base.group_user,crud,
+access_wh40k_weapon_user,wh40k.weapon user,wh40k.weapon,base.group_user,crud,
+access_wh40k_model_user,wh40k.model user,wh40k.model,base.group_user,crud,
+access_wh40k_unit_user,wh40k.unit user,wh40k.unit,base.group_user,crud,
+access_wh40k_detachment_user,wh40k.detachment user,wh40k.detachment,base.group_user,crud,
+access_wh40k_force_user,wh40k.force user,wh40k.force,base.group_user,crud,
+access_wh40k_roster_user,wh40k.roster user,wh40k.roster,base.group_user,crud,
+access_wh40k_mission_user,wh40k.mission user,wh40k.mission,base.group_user,crud,
+access_wh40k_match_user,wh40k.match user,wh40k.match,base.group_user,crud,

@@ -93,7 +93,8 @@ class Wh40kMatch(models.Model):
 
     def get_join_url(self, base_url=None):
         self.ensure_one()
-        base = (base_url or self.env["ir.config_parameter"].sudo().get_param("web.base.url") or "").rstrip("/")
+        icp = self.env["ir.config_parameter"].sudo()
+        base = (base_url or icp.get_str("web.base.url") or "").rstrip("/")
         return f"{base}/wh40k/join/{self.match_token}"
 
     def _roster_fits_points(self, roster):

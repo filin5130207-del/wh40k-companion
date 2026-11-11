@@ -24,13 +24,10 @@ class ResPartner(models.Model):
         string="Rosters",
     )
 
-    _sql_constraints = [
-        (
-            "wh40k_nickname_uniq",
-            "unique(wh40k_nickname)",
-            "WH40k nickname must be unique.",
-        ),
-    ]
+    _wh40k_nickname_uniq = models.Constraint(
+        "unique(wh40k_nickname)",
+        "WH40k nickname must be unique.",
+    )
 
     @api.depends("wh40k_wins", "wh40k_losses")
     def _compute_wh40k_stats(self):

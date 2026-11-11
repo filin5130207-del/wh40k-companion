@@ -23,7 +23,7 @@ class Wh40kCompanionController(http.Controller):
         return {"ok": False, "error": str(exc)}
 
     # ------------------------------------------------------------------ roster
-    @http.route("/wh40k/roster/import", type="json", auth="user", methods=["POST"])
+    @http.route("/wh40k/roster/import", type="jsonrpc", auth="user", methods=["POST"])
     def roster_import(self, roster_json=None, name=None, **kwargs):
         try:
             partner = self._partner()
@@ -198,7 +198,7 @@ class Wh40kCompanionController(http.Controller):
         )
 
     # ----------------------------------------------------------------- profile
-    @http.route("/wh40k/player/dashboard", type="json", auth="user")
+    @http.route("/wh40k/player/dashboard", type="jsonrpc", auth="user")
     def player_dashboard(self, **kwargs):
         try:
             partner = self._partner()
@@ -231,7 +231,7 @@ class Wh40kCompanionController(http.Controller):
         except Exception as exc:
             return self._error(exc)
 
-    @http.route("/wh40k/player/nickname", type="json", auth="user")
+    @http.route("/wh40k/player/nickname", type="jsonrpc", auth="user")
     def set_nickname(self, nickname=None, **kwargs):
         try:
             partner = self._partner()
@@ -243,7 +243,7 @@ class Wh40kCompanionController(http.Controller):
             return self._error(exc)
 
     # ---------------------------------------------------------------- missions
-    @http.route("/wh40k/missions", type="json", auth="user")
+    @http.route("/wh40k/missions", type="jsonrpc", auth="user")
     def list_missions(self, **kwargs):
         try:
             missions = request.env["wh40k.mission"].search([("active", "=", True)])
@@ -263,7 +263,7 @@ class Wh40kCompanionController(http.Controller):
             return self._error(exc)
 
     # ------------------------------------------------------------------- match
-    @http.route("/wh40k/match/create", type="json", auth="user")
+    @http.route("/wh40k/match/create", type="jsonrpc", auth="user")
     def match_create(self, roster_id=None, mission_id=None, points="2000", **kwargs):
         try:
             partner = self._partner()
@@ -289,7 +289,7 @@ class Wh40kCompanionController(http.Controller):
         except Exception as exc:
             return self._error(exc)
 
-    @http.route("/wh40k/match/publish", type="json", auth="user")
+    @http.route("/wh40k/match/publish", type="jsonrpc", auth="user")
     def match_publish(self, match_id=None, **kwargs):
         try:
             partner = self._partner()
@@ -308,7 +308,7 @@ class Wh40kCompanionController(http.Controller):
         except Exception as exc:
             return self._error(exc)
 
-    @http.route("/wh40k/match/verify", type="json", auth="user")
+    @http.route("/wh40k/match/verify", type="jsonrpc", auth="user")
     def match_verify(self, match_token=None, **kwargs):
         try:
             match = request.env["wh40k.match"].search(
@@ -337,7 +337,7 @@ class Wh40kCompanionController(http.Controller):
         except Exception as exc:
             return self._error(exc)
 
-    @http.route("/wh40k/match/join", type="json", auth="user")
+    @http.route("/wh40k/match/join", type="jsonrpc", auth="user")
     def match_join(self, match_token=None, roster_id=None, **kwargs):
         try:
             partner = self._partner()
@@ -361,7 +361,7 @@ class Wh40kCompanionController(http.Controller):
         except Exception as exc:
             return self._error(exc)
 
-    @http.route("/wh40k/match/eligible_rosters", type="json", auth="user")
+    @http.route("/wh40k/match/eligible_rosters", type="jsonrpc", auth="user")
     def eligible_rosters(self, match_token=None, **kwargs):
         try:
             partner = self._partner()
@@ -393,7 +393,7 @@ class Wh40kCompanionController(http.Controller):
         except Exception as exc:
             return self._error(exc)
 
-    @http.route("/wh40k/match/state", type="json", auth="user")
+    @http.route("/wh40k/match/state", type="jsonrpc", auth="user")
     def match_state(self, match_id=None, **kwargs):
         try:
             partner = self._partner()
@@ -444,7 +444,7 @@ class Wh40kCompanionController(http.Controller):
         except Exception as exc:
             return self._error(exc)
 
-    @http.route("/wh40k/match/unit_state", type="json", auth="user", methods=["POST"])
+    @http.route("/wh40k/match/unit_state", type="jsonrpc", auth="user", methods=["POST"])
     def match_unit_state(self, match_id=None, unit_state=None, **kwargs):
         try:
             partner = self._partner()
@@ -458,7 +458,7 @@ class Wh40kCompanionController(http.Controller):
         except Exception as exc:
             return self._error(exc)
 
-    @http.route("/wh40k/match/surrender", type="json", auth="user")
+    @http.route("/wh40k/match/surrender", type="jsonrpc", auth="user")
     def match_surrender(self, match_id=None, **kwargs):
         try:
             partner = self._partner()
@@ -475,7 +475,7 @@ class Wh40kCompanionController(http.Controller):
         except Exception as exc:
             return self._error(exc)
 
-    @http.route("/wh40k/match/cancel", type="json", auth="user")
+    @http.route("/wh40k/match/cancel", type="jsonrpc", auth="user")
     def match_cancel(self, match_id=None, **kwargs):
         try:
             partner = self._partner()
@@ -487,7 +487,7 @@ class Wh40kCompanionController(http.Controller):
         except Exception as exc:
             return self._error(exc)
 
-    @http.route("/wh40k/roster/<int:roster_id>/detail", type="json", auth="user")
+    @http.route("/wh40k/roster/<int:roster_id>/detail", type="jsonrpc", auth="user")
     def roster_detail(self, roster_id, **kwargs):
         try:
             roster = request.env["wh40k.roster"].browse(roster_id)

@@ -12,24 +12,24 @@
             </nav>
         </header>
 
-        <div t-if="state.error" class="wh40k-error" t-esc="state.error"/>
+        <div t-if="this.state.error" class="wh40k-error" t-out="this.state.error"/>
 
-        <t t-if="state.screen === 'dashboard'">
+        <t t-if="this.state.screen === 'dashboard'">
             <t t-call="wh40k_companion.PlayerDashboard"/>
         </t>
-        <t t-elif="state.screen === 'create_match'">
+        <t t-elif="this.state.screen === 'create_match'">
             <t t-call="wh40k_companion.CreateMatch"/>
         </t>
-        <t t-elif="state.screen === 'waiting'">
+        <t t-elif="this.state.screen === 'waiting'">
             <t t-call="wh40k_companion.WaitingScreen"/>
         </t>
-        <t t-elif="state.screen === 'join'">
+        <t t-elif="this.state.screen === 'join'">
             <t t-call="wh40k_companion.JoinScreen"/>
         </t>
-        <t t-elif="state.screen === 'game'">
+        <t t-elif="this.state.screen === 'game'">
             <t t-call="wh40k_companion.GameScreen"/>
         </t>
-        <t t-elif="state.screen === 'result'">
+        <t t-elif="this.state.screen === 'result'">
             <t t-call="wh40k_companion.MatchResultScreen"/>
         </t>
     </div>
@@ -40,37 +40,37 @@
         <h2>Commander</h2>
         <div class="wh40k-row" style="margin-bottom: 0.75rem;">
             <input class="wh40k-input" style="max-width: 220px; margin: 0;"
-                   t-att-value="state.player.nickname"
-                   t-on-change="onNicknameChange"
+                   t-att-value="this.state.player.nickname"
+                   t-on-change="this.onNicknameChange"
                    placeholder="Nickname"/>
-            <button class="wh40k-btn" t-on-click="saveNickname">Save nickname</button>
+            <button class="wh40k-btn" t-on-click="this.saveNickname">Save nickname</button>
         </div>
         <div class="wh40k-stats">
-            <div class="wh40k-stat"><div class="value" t-esc="state.player.wins"/><div class="label">Wins</div></div>
-            <div class="wh40k-stat"><div class="value" t-esc="state.player.losses"/><div class="label">Losses</div></div>
-            <div class="wh40k-stat"><div class="value" t-esc="state.player.total_match"/><div class="label">Matches</div></div>
-            <div class="wh40k-stat"><div class="value" t-esc="(state.player.win_rate || 0).toFixed(0) + '%'"/><div class="label">Win rate</div></div>
+            <div class="wh40k-stat"><div class="value" t-out="this.state.player.wins"/><div class="label">Wins</div></div>
+            <div class="wh40k-stat"><div class="value" t-out="this.state.player.losses"/><div class="label">Losses</div></div>
+            <div class="wh40k-stat"><div class="value" t-out="this.state.player.total_match"/><div class="label">Matches</div></div>
+            <div class="wh40k-stat"><div class="value" t-out="(this.state.player.win_rate || 0).toFixed(0) + '%'"/><div class="label">Win rate</div></div>
         </div>
     </section>
 
     <section class="wh40k-panel">
         <h2>Rosters</h2>
         <div class="wh40k-row" style="margin-bottom: 0.75rem;">
-            <input class="wh40k-file" type="file" accept="application/json,.json" t-ref="rosterFile" t-on-change="onRosterFile"/>
-            <button class="wh40k-btn wh40k-btn-primary" t-on-click="importRoster" t-att-disabled="state.busy">Import JSON</button>
+            <input class="wh40k-file" type="file" accept="application/json,.json" t-ref="this.rosterFile" t-on-change="this.onRosterFile"/>
+            <button class="wh40k-btn wh40k-btn-primary" t-on-click="this.importRoster" t-att-disabled="this.state.busy">Import JSON</button>
         </div>
         <p class="wh40k-muted">Import a NewRecruit / Battlescribe roster JSON (e.g. testdata/aufychi.json).</p>
         <ul class="wh40k-list">
-            <t t-foreach="state.rosters" t-as="roster" t-key="roster.id">
+            <t t-foreach="this.state.rosters" t-as="roster" t-key="roster.id">
                 <li class="wh40k-list-item">
                     <div>
-                        <strong t-esc="roster.name"/>
-                        <div class="wh40k-muted" t-esc="roster.points_used + ' / ' + roster.points_limit + ' pts · ' + roster.unit_count + ' units'"/>
+                        <strong t-out="roster.name"/>
+                        <div class="wh40k-muted" t-out="roster.points_used + ' / ' + roster.points_limit + ' pts · ' + roster.unit_count + ' units'"/>
                     </div>
                 </li>
             </t>
         </ul>
-        <p t-if="!state.rosters.length" class="wh40k-muted">No rosters yet.</p>
+        <p t-if="!this.state.rosters.length" class="wh40k-muted">No rosters yet.</p>
     </section>
 </t>
 
@@ -78,21 +78,21 @@
     <section class="wh40k-panel">
         <h2>Create Match</h2>
         <label class="wh40k-muted">Points</label>
-        <select class="wh40k-select" t-on-change="onPointsChange">
-            <option value="2000" t-att-selected="state.create.points === '2000'">2000</option>
-            <option value="1000" t-att-selected="state.create.points === '1000'">1000</option>
+        <select class="wh40k-select" t-on-change="this.onPointsChange">
+            <option value="2000" t-att-selected="this.state.create.points === '2000'">2000</option>
+            <option value="1000" t-att-selected="this.state.create.points === '1000'">1000</option>
         </select>
 
         <label class="wh40k-muted">Mission</label>
         <div class="wh40k-list" style="margin-bottom: 0.75rem;">
-            <t t-foreach="state.missions" t-as="mission" t-key="mission.id">
+            <t t-foreach="this.state.missions" t-as="mission" t-key="mission.id">
                 <button type="button" class="wh40k-list-item"
-                        t-att-class="{'selected': state.create.mission_id === mission.id}"
+                        t-att-class="{'selected': this.state.create.mission_id === mission.id}"
                         t-on-click="() => this.selectMission(mission.id)">
                     <div>
-                        <strong t-esc="mission.name"/>
-                        <div class="wh40k-muted" t-esc="mission.deployment"/>
-                        <div class="wh40k-muted" t-esc="mission.description"/>
+                        <strong t-out="mission.name"/>
+                        <div class="wh40k-muted" t-out="mission.deployment"/>
+                        <div class="wh40k-muted" t-out="mission.description"/>
                     </div>
                 </button>
             </t>
@@ -100,18 +100,18 @@
 
         <label class="wh40k-muted">Your roster</label>
         <div class="wh40k-list" style="margin-bottom: 0.75rem;">
-            <t t-foreach="eligibleHostRosters" t-as="roster" t-key="roster.id">
+            <t t-foreach="this.eligibleHostRosters" t-as="roster" t-key="roster.id">
                 <button type="button" class="wh40k-list-item"
-                        t-att-class="{'selected': state.create.roster_id === roster.id}"
+                        t-att-class="{'selected': this.state.create.roster_id === roster.id}"
                         t-on-click="() => this.selectHostRoster(roster.id)">
                     <div>
-                        <strong t-esc="roster.name"/>
-                        <div class="wh40k-muted" t-esc="roster.points_used + ' pts'"/>
+                        <strong t-out="roster.name"/>
+                        <div class="wh40k-muted" t-out="roster.points_used + ' pts'"/>
                     </div>
                 </button>
             </t>
         </div>
-        <button class="wh40k-btn wh40k-btn-primary" t-on-click="createAndPublish" t-att-disabled="state.busy">
+        <button class="wh40k-btn wh40k-btn-primary" t-on-click="this.createAndPublish" t-att-disabled="this.state.busy">
             Publish match &amp; show QR
         </button>
     </section>
@@ -121,11 +121,11 @@
     <section class="wh40k-panel wh40k-qr">
         <h2>Waiting for opponent</h2>
         <p class="wh40k-muted">Share this QR or link. Match cancels automatically after 15 minutes.</p>
-        <img t-att-src="qrImageUrl" alt="Match QR code"/>
-        <code t-esc="state.waiting.join_url"/>
+        <img t-att-src="this.qrImageUrl" alt="Match QR code"/>
+        <code t-out="this.state.waiting.join_url"/>
         <div class="wh40k-row">
-            <button class="wh40k-btn" t-on-click="refreshMatch">Refresh status</button>
-            <button class="wh40k-btn wh40k-btn-danger" t-on-click="cancelWaiting">Cancel</button>
+            <button class="wh40k-btn" t-on-click="this.refreshMatch">Refresh status</button>
+            <button class="wh40k-btn wh40k-btn-danger" t-on-click="this.cancelWaiting">Cancel</button>
         </div>
     </section>
 </t>
@@ -134,31 +134,31 @@
     <section class="wh40k-panel">
         <h2>Join Match</h2>
         <label class="wh40k-muted">Match token or join URL</label>
-        <input class="wh40k-input" t-att-value="state.join.token" t-on-change="onJoinTokenChange" placeholder="UUID token"/>
-        <button class="wh40k-btn" t-on-click="verifyToken" t-att-disabled="state.busy">Verify</button>
+        <input class="wh40k-input" t-att-value="this.state.join.token" t-on-change="this.onJoinTokenChange" placeholder="UUID token"/>
+        <button class="wh40k-btn" t-on-click="this.verifyToken" t-att-disabled="this.state.busy">Verify</button>
 
-        <t t-if="state.join.verified">
+        <t t-if="this.state.join.verified">
             <hr style="border-color: var(--wh40k-border); margin: 1rem 0;"/>
             <p>
-                Host: <strong t-esc="state.join.host_nickname"/> ·
-                <t t-esc="state.join.points"/> pts ·
-                <t t-esc="state.join.mission_name"/>
+                Host: <strong t-out="this.state.join.host_nickname"/> ·
+                <t t-out="this.state.join.points"/> pts ·
+                <t t-out="this.state.join.mission_name"/>
             </p>
             <label class="wh40k-muted">Select your roster (filtered by points)</label>
             <div class="wh40k-list" style="margin-bottom: 0.75rem;">
-                <t t-foreach="state.join.rosters" t-as="roster" t-key="roster.id">
+                <t t-foreach="this.state.join.rosters" t-as="roster" t-key="roster.id">
                     <button type="button" class="wh40k-list-item"
-                            t-att-class="{'selected': state.join.roster_id === roster.id}"
+                            t-att-class="{'selected': this.state.join.roster_id === roster.id}"
                             t-on-click="() => this.selectGuestRoster(roster.id)">
                         <div>
-                            <strong t-esc="roster.name"/>
-                            <div class="wh40k-muted" t-esc="roster.points_used + ' pts'"/>
+                            <strong t-out="roster.name"/>
+                            <div class="wh40k-muted" t-out="roster.points_used + ' pts'"/>
                         </div>
                     </button>
                 </t>
             </div>
-            <p t-if="!state.join.rosters.length" class="wh40k-muted">No eligible rosters for this points limit.</p>
-            <button class="wh40k-btn wh40k-btn-success" t-on-click="joinMatch" t-att-disabled="state.busy">Join battle</button>
+            <p t-if="!this.state.join.rosters.length" class="wh40k-muted">No eligible rosters for this points limit.</p>
+            <button class="wh40k-btn wh40k-btn-success" t-on-click="this.joinMatch" t-att-disabled="this.state.busy">Join battle</button>
         </t>
     </section>
 </t>
@@ -167,24 +167,24 @@
     <section class="wh40k-panel">
         <div class="wh40k-side-title">
             <h2 style="margin:0;">Battle</h2>
-            <button class="wh40k-btn wh40k-btn-danger" t-on-click="confirmSurrender">Surrender</button>
+            <button class="wh40k-btn wh40k-btn-danger" t-on-click="this.confirmSurrender">Surrender</button>
         </div>
-        <p class="wh40k-muted" t-esc="(state.match.mission &amp;&amp; state.match.mission.name) || ''"/>
+        <p class="wh40k-muted" t-out="(this.state.match.mission &amp;&amp; this.state.match.mission.name) || ''"/>
         <p class="wh40k-swipe-hint">Tap a unit for datasheet. Use −W / −M to track wounds and models.</p>
     </section>
 
     <div class="wh40k-game">
         <section class="wh40k-panel">
             <div class="wh40k-side-title">
-                <h3 style="margin:0;" t-esc="ownSideLabel"/>
+                <h3 style="margin:0;" t-out="this.ownSideLabel"/>
                 <span class="wh40k-muted">You</span>
             </div>
-            <t t-foreach="ownUnits" t-as="unit" t-key="unit.unit_id">
+            <t t-foreach="this.ownUnits" t-as="unit" t-key="unit.unit_id">
                 <div class="wh40k-unit-card" t-att-class="{'destroyed': unit.destroyed}"
                      t-on-click="() => this.openDatasheet(unit)">
-                    <strong t-esc="unit.name"/>
+                    <strong t-out="unit.name"/>
                     <div class="wh40k-muted"
-                         t-esc="'Models ' + unit.models_remaining + '/' + unit.models + ' · Wounds ' + unit.wounds_remaining + '/' + unit.wounds'"/>
+                         t-out="'Models ' + unit.models_remaining + '/' + unit.models + ' · Wounds ' + unit.wounds_remaining + '/' + unit.wounds'"/>
                     <div class="wh40k-unit-actions">
                         <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', -1)">−W</button>
                         <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', 1)">+W</button>
@@ -198,15 +198,15 @@
 
         <section class="wh40k-panel">
             <div class="wh40k-side-title">
-                <h3 style="margin:0;" t-esc="oppSideLabel"/>
+                <h3 style="margin:0;" t-out="this.oppSideLabel"/>
                 <span class="wh40k-muted">Opponent</span>
             </div>
-            <t t-foreach="oppUnits" t-as="unit" t-key="unit.unit_id">
+            <t t-foreach="this.oppUnits" t-as="unit" t-key="unit.unit_id">
                 <div class="wh40k-unit-card" t-att-class="{'destroyed': unit.destroyed}"
                      t-on-click="() => this.openDatasheet(unit)">
-                    <strong t-esc="unit.name"/>
+                    <strong t-out="unit.name"/>
                     <div class="wh40k-muted"
-                         t-esc="'Models ' + unit.models_remaining + '/' + unit.models + ' · Wounds ' + unit.wounds_remaining + '/' + unit.wounds'"/>
+                         t-out="'Models ' + unit.models_remaining + '/' + unit.models + ' · Wounds ' + unit.wounds_remaining + '/' + unit.wounds'"/>
                     <div class="wh40k-unit-actions">
                         <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', -1)">−W</button>
                         <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', 1)">+W</button>
@@ -220,38 +220,38 @@
 
         <section class="wh40k-panel wh40k-game-rules">
             <h3>Rules</h3>
-            <t t-foreach="state.rules" t-as="rule" t-key="rule.name + rule.scope">
+            <t t-foreach="this.state.rules" t-as="rule" t-key="rule.name + rule.scope">
                 <div style="margin-bottom: 0.75rem;">
-                    <strong t-esc="rule.name"/>
-                    <span class="wh40k-muted" t-esc="' (' + rule.scope + ')'"/>
-                    <div class="wh40k-muted" style="white-space: pre-wrap;" t-esc="rule.description"/>
+                    <strong t-out="rule.name"/>
+                    <span class="wh40k-muted" t-out="' (' + rule.scope + ')'"/>
+                    <div class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.description"/>
                 </div>
             </t>
-            <p t-if="!state.rules.length" class="wh40k-muted">No army/detachment rules loaded.</p>
+            <p t-if="!this.state.rules.length" class="wh40k-muted">No army/detachment rules loaded.</p>
         </section>
     </div>
 
-    <t t-if="state.datasheet">
-        <div class="wh40k-modal-backdrop" t-on-click="closeDatasheet">
+    <t t-if="this.state.datasheet">
+        <div class="wh40k-modal-backdrop" t-on-click="this.closeDatasheet">
             <div class="wh40k-modal" t-on-click.stop="">
                 <div class="wh40k-side-title">
-                    <h3 style="margin:0;" t-esc="state.datasheet.name"/>
-                    <button class="wh40k-btn" t-on-click="closeDatasheet">Close</button>
+                    <h3 style="margin:0;" t-out="this.state.datasheet.name"/>
+                    <button class="wh40k-btn" t-on-click="this.closeDatasheet">Close</button>
                 </div>
-                <t t-foreach="state.datasheet.models || []" t-as="model" t-key="model.id">
-                    <h4 t-esc="model.name + ' ×' + model.quantity"/>
+                <t t-foreach="this.state.datasheet.models || []" t-as="model" t-key="model.id">
+                    <h4 t-out="model.name + ' ×' + model.quantity"/>
                     <table>
                         <tr><th>M</th><th>T</th><th>Sv</th><th>W</th><th>LD</th><th>OC</th><th>InSv</th></tr>
                         <tr>
-                            <td t-esc="model.M"/><td t-esc="model.T"/><td t-esc="model.Sv"/>
-                            <td t-esc="model.W"/><td t-esc="model.LD"/><td t-esc="model.OC"/><td t-esc="model.InSv"/>
+                            <td t-out="model.M"/><td t-out="model.T"/><td t-out="model.Sv"/>
+                            <td t-out="model.W"/><td t-out="model.LD"/><td t-out="model.OC"/><td t-out="model.InSv"/>
                         </tr>
                     </table>
                     <t t-foreach="model.weapons || []" t-as="w" t-key="w.name">
                         <div>
-                            <strong t-esc="w.name"/>
+                            <strong t-out="w.name"/>
                             <span class="wh40k-muted"
-                                  t-esc="' · ' + w.weapon_type + ' · R ' + (w.range || '-') + ' · A ' + (w.A || '-') + ' · ' + (w.skill || '-') + ' · S ' + (w.S || '-') + ' · AP ' + (w.AP || '-') + ' · D ' + (w.D || '-')"/>
+                                  t-out="' · ' + w.weapon_type + ' · R ' + (w.range || '-') + ' · A ' + (w.A || '-') + ' · ' + (w.skill || '-') + ' · S ' + (w.S || '-') + ' · AP ' + (w.AP || '-') + ' · D ' + (w.D || '-')"/>
                         </div>
                     </t>
                 </t>
@@ -264,7 +264,7 @@
     <section class="wh40k-panel" style="text-align:center;">
         <h2>Match finished</h2>
         <p class="wh40k-muted">Winner</p>
-        <p style="font-size: 1.6rem; font-weight: 700; color: var(--wh40k-accent);" t-esc="state.result.winner_nickname"/>
+        <p style="font-size: 1.6rem; font-weight: 700; color: var(--wh40k-accent);" t-out="this.state.result.winner_nickname"/>
         <button class="wh40k-btn wh40k-btn-primary" t-on-click="() => this.setScreen('dashboard')">Back to dashboard</button>
     </section>
 </t>

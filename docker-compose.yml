@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: odoo
@@ -17,6 +18,7 @@ services:
 
   odoo:
     image: odoo:20.0
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -35,6 +37,8 @@ services:
       --db_host=db
       --db_user=odoo
       --db_password=odoo
+      --http-interface=0.0.0.0
+      --http-port=8069
       --addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons
 
 volumes:

@@ -1,8 +1,9 @@
 /** @odoo-module **/
 
-import { Component, useState, useRef, onWillStart, onMounted, onWillUnmount } from "@odoo/owl";
+import { Component, proxy, signal, onWillStart, onMounted, onWillUnmount, useProps } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { rpc } from "@web/core/network/rpc";
+import { standardActionServiceProps } from "@web/webclient/actions/action_plugin";
 
 function extractJoinToken() {
     const hash = window.location.hash || "";
@@ -17,13 +18,13 @@ function extractJoinToken() {
 
 export class Wh40kCompanionApp extends Component {
     static template = "wh40k_companion.CompanionApp";
-    static props = {
-        "*": true,
-    };
+    props = useProps({
+        ...standardActionServiceProps,
+    });
+    rosterFile = signal.ref();
 
     setup() {
-        this.rosterFile = useRef("rosterFile");
-        this.state = useState({
+        this.state = proxy({
             screen: "dashboard",
             busy: false,
             error: "",
@@ -208,8 +209,9 @@ export class Wh40kCompanionApp extends Component {
             await this.loadDashboard();
             this.state.busy = false;
             this.state.pendingRosterJson = null;
-            if (this.rosterFile.el) {
-                this.rosterFile.el.value = "";
+            const fileInput = this.rosterFile();
+            if (fileInput) {
+                fileInput.value = "";
             }
         } catch (e) {
             this.setError(e.message);
