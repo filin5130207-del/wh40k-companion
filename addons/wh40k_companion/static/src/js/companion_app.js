@@ -112,6 +112,7 @@ export class Wh40kCompanionApp extends Component {
                 roster_id: null,
             },
             match: null,
+            activeMatch: null, // dashboard summary when an active match exists
             unitState: { host: [], guest: [], undo: {} },
             rules: [],
             ownRules: [],
@@ -165,9 +166,35 @@ export class Wh40kCompanionApp extends Component {
     }
 
     get showBottomNav() {
-        return ["home", "dashboard", "rosters", "create_match", "join", "import_preview"].includes(
-            this.state.screen
-        );
+        // Keep sticky nav visible during the active match (game) so players can
+        // leave without surrendering and still find their way back via resume.
+        return [
+            "home",
+            "dashboard",
+            "rosters",
+            "create_match",
+            "join",
+            "import_preview",
+            "game",
+        ].includes(this.state.screen);
+    }
+
+    get activeMatchSummary() {
+        const am = this.state.activeMatch;
+        if (!am) {
+            return "";
+        }
+        const parts = [];
+        if (am.opponent_nickname) {
+            parts.push(`vs ${am.opponent_nickname}`);
+        }
+        if (am.mission_name) {
+            parts.push(am.mission_name);
+        }
+        if (am.points) {
+            parts.push(`${am.points} pts`);
+        }
+        return parts.join(" · ") || "Матч ещё идёт";
     }
 
     get qrImageUrl() {
@@ -308,12 +335,41 @@ export class Wh40kCompanionApp extends Component {
         this.state.player = data.player;
         this.state.rosters = data.rosters || [];
         this.state.needsNickname = !(data.player && data.player.has_nickname);
+        this.state.activeMatch = data.active_match || null;
         const pending = (data.pending_join_token || "").trim();
         if (pending && !this.state.join.token) {
             this.state.join.token = pending;
             rememberJoinToken(pending);
         } else if (pending && pending === this.state.join.token) {
             rememberJoinToken(pending);
+        }
+    }
+
+    async refreshActiveMatch() {
+        try {
+            const data = await this.rpc("/wh40k/match/active");
+            this.state.activeMatch = data.active_match || null;
+        } catch (_e) {
+            // non-fatal; banner simply stays as-is
+        }
+    }
+
+    async resumeActiveMatch() {
+        const matchId =
+            (this.state.activeMatch && this.state.activeMatch.id) ||
+            (this.state.match && this.state.match.id);
+        if (!matchId) {
+            this.setError("Нет активного матча для возврата.");
+            return;
+        }
+        try {
+            this.state.busy = true;
+            await this.enterGame(matchId);
+            this.state.busy = false;
+        } catch (e) {
+            this.state.busy = false;
+            this.state.activeMatch = null;
+            this.setError(e.message || "Не удалось вернуться в матч.");
         }
     }
 
@@ -616,7 +672,27 @@ export class Wh40kCompanionApp extends Component {
 
     async enterGame(matchId) {
         const data = await this.rpc("/wh40k/match/state", { match_id: matchId });
+        if (data.match.state !== "active") {
+            this.state.activeMatch = null;
+            throw new Error(
+                data.match.state === "finished"
+                    ? "Матч уже завершён."
+                    : data.match.state === "cancelled"
+                      ? "Матч отменён."
+                      : "Матч сейчас недоступен."
+            );
+        }
         this.state.match = data.match;
+        this.state.activeMatch = {
+            id: data.match.id,
+            state: data.match.state,
+            points: data.match.points,
+            mission_name: (data.match.mission && data.match.mission.name) || "",
+            opponent_nickname: data.match.is_host
+                ? data.match.guest?.nickname || ""
+                : data.match.host?.nickname || "",
+            is_host: !!data.match.is_host,
+        };
         const us = data.match.unit_state || {};
         this.state.unitState = {
             host: us.host || [],
@@ -891,6 +967,8 @@ export class Wh40kCompanionApp extends Component {
                 you_surrendered: !!result.you_surrendered,
                 message: result.message || "",
             };
+            this.state.activeMatch = null;
+            this.state.match = null;
             this.state.busy = false;
             await this.loadDashboard();
             this.setScreen("result");

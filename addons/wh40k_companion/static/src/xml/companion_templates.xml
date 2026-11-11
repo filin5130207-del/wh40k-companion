@@ -41,19 +41,19 @@
                 <span class="wh40k-nav-glyph" aria-hidden="true">R</span>
                 <span class="wh40k-nav-label">Ростеры</span>
             </button>
-            <button type="button" class="wh40k-nav-circle wh40k-nav-home"
-                    t-att-class="{'active': this.state.screen === 'home' || this.state.screen === 'dashboard'}"
-                    t-on-click="() => this.setScreen('home')"
-                    aria-label="Главная" title="Главная">
-                <span class="wh40k-nav-glyph" aria-hidden="true">⌂</span>
-                <span class="wh40k-nav-label">Главная</span>
-            </button>
             <button type="button" class="wh40k-nav-circle wh40k-nav-create"
                     t-att-class="{'active': this.state.screen === 'create_match'}"
                     t-on-click="() => this.setScreen('create_match')"
                     aria-label="Создать матч" title="Создать матч">
                 <span class="wh40k-nav-glyph wh40k-nav-plus" aria-hidden="true">+</span>
                 <span class="wh40k-nav-label">Матч</span>
+            </button>
+            <button type="button" class="wh40k-nav-circle wh40k-nav-home"
+                    t-att-class="{'active': this.state.screen === 'home' || this.state.screen === 'dashboard'}"
+                    t-on-click="() => this.setScreen('home')"
+                    aria-label="Главная" title="Главная">
+                <span class="wh40k-nav-glyph" aria-hidden="true">⌂</span>
+                <span class="wh40k-nav-label">Главная</span>
             </button>
         </nav>
     </div>
@@ -76,6 +76,20 @@
 <t t-name="wh40k_companion.HomeScreen">
     <section class="wh40k-panel">
         <h2>Личный кабинет</h2>
+        <t t-if="this.state.activeMatch">
+            <div class="wh40k-resume-banner" role="status">
+                <div class="wh40k-resume-copy">
+                    <strong>Активный матч</strong>
+                    <p class="wh40k-muted" style="margin: 0.25rem 0 0;"
+                       t-out="this.activeMatchSummary"/>
+                </div>
+                <button type="button" class="wh40k-btn wh40k-btn-primary"
+                        t-on-click="this.resumeActiveMatch"
+                        t-att-disabled="this.state.busy">
+                    Вернуться в матч
+                </button>
+            </div>
+        </t>
         <div class="wh40k-row" style="margin-bottom: 0.75rem;">
             <input class="wh40k-input" style="max-width: 220px; margin: 0;"
                    t-att-value="this.state.player.nickname"

@@ -127,14 +127,41 @@
 }
 
 .wh40k-nav-home {
-    width: 3.35rem;
-    height: 3.35rem;
+    width: 3.1rem;
+    height: 3.1rem;
 }
 
 .wh40k-nav-create {
+    width: 3.35rem;
+    height: 3.35rem;
     background: var(--wh40k-accent);
     border-color: var(--wh40k-accent);
     color: #fff;
+}
+
+.wh40k-resume-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    margin: 0 0 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid rgba(196, 92, 38, 0.55);
+    border-radius: 0.65rem;
+    background:
+        linear-gradient(135deg, rgba(196, 92, 38, 0.22), rgba(61, 139, 110, 0.1));
+}
+
+.wh40k-resume-copy {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.wh40k-resume-copy strong {
+    display: block;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
 }
 
 .wh40k-nav-create.active,

@@ -24,6 +24,34 @@ class Wh40kCompanionController(http.Controller):
         _logger.exception("WH40k companion error")
         return {"ok": False, "error": str(exc)}
 
+    def _active_match_payload(self, partner):
+        """Return a lightweight summary of the player's in-progress match, if any."""
+        Match = request.env["wh40k.match"]
+        match = Match.search(
+            [
+                ("state", "=", "active"),
+                "|",
+                ("host_id", "=", partner.id),
+                ("guest_id", "=", partner.id),
+            ],
+            limit=1,
+            order="write_date desc, id desc",
+        )
+        if not match:
+            return None
+        is_host = match.host_id.id == partner.id
+        opponent = match.guest_id if is_host else match.host_id
+        return {
+            "id": match.id,
+            "state": match.state,
+            "points": match.points,
+            "mission_name": match.mission_id.name if match.mission_id else "",
+            "opponent_nickname": (
+                (opponent.wh40k_nickname or opponent.name) if opponent else ""
+            ),
+            "is_host": is_host,
+        }
+
     def _public_base_url(self):
         """Prefer a non-loopback host so QR/join links work on LAN phones."""
         icp = request.env["ir.config_parameter"].sudo()
@@ -363,6 +391,7 @@ class Wh40kCompanionController(http.Controller):
                     "win_rate": partner.wh40k_win_rate,
                 },
                 "pending_join_token": request.session.get("wh40k_pending_join") or "",
+                "active_match": self._active_match_payload(partner),
                 "rosters": [
                     {
                         "id": r.id,
@@ -375,6 +404,14 @@ class Wh40kCompanionController(http.Controller):
                     for r in rosters
                 ],
             }
+        except Exception as exc:
+            return self._error(exc)
+
+    @http.route("/wh40k/match/active", type="jsonrpc", auth="user")
+    def match_active(self, **kwargs):
+        try:
+            partner = self._partner()
+            return {"ok": True, "active_match": self._active_match_payload(partner)}
         except Exception as exc:
             return self._error(exc)
 
