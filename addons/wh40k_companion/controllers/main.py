@@ -77,6 +77,7 @@ class Wh40kCompanionController(http.Controller):
     )
     def wh40k_signup(self, **post):
         error = ""
+        join = (post.get("join") or request.httprequest.args.get("join") or "").strip()
         if request.httprequest.method == "POST":
             email = (post.get("email") or "").strip().lower()
             password = post.get("password") or ""
@@ -118,6 +119,9 @@ class Wh40kCompanionController(http.Controller):
                     "type": "password",
                 }
                 authenticate(request.session, request.env, credential)
+                if join:
+                    request.session["wh40k_pending_join"] = join
+                    return request.redirect(f"/wh40k/join/{join}")
                 return request.redirect("/wh40k/app")
             except (UserError, ValidationError) as exc:
                 error = str(exc)
@@ -130,20 +134,36 @@ class Wh40kCompanionController(http.Controller):
                 "error": error,
                 "email": post.get("email") or "",
                 "nickname": post.get("nickname") or "",
+                "join": join,
             },
         )
 
-    @http.route("/wh40k/app", type="http", auth="user", website=False)
-    def wh40k_app_redirect(self, **kwargs):
-        action = request.env.ref(
+    def _battle_app_action(self):
+        return request.env.ref(
             "wh40k_companion.action_wh40k_companion_client", raise_if_not_found=False
         )
+
+    def _redirect_to_battle_app(self, join_token=None):
+        """Open the Owl Battle App; stash join token in session + hash (SPA-safe)."""
+        action = self._battle_app_action()
         if not action:
             return request.redirect("/odoo")
-        join = kwargs.get("wh40k_join") or ""
-        if join:
-            return request.redirect(f"/odoo/action-{action.id}?wh40k_join={join}")
+        if join_token:
+            request.session["wh40k_pending_join"] = join_token
+            return request.redirect(
+                f"/odoo/action-{action.id}#wh40k_join={join_token}"
+            )
         return request.redirect(f"/odoo/action-{action.id}")
+
+    @http.route("/wh40k/app", type="http", auth="user", website=False)
+    def wh40k_app_redirect(self, **kwargs):
+        join = (
+            kwargs.get("wh40k_join")
+            or kwargs.get("join")
+            or request.session.get("wh40k_pending_join")
+            or ""
+        )
+        return self._redirect_to_battle_app(join_token=join or None)
 
     # ------------------------------------------------------------------ roster
     @http.route("/wh40k/roster/preview", type="jsonrpc", auth="user", methods=["POST"])
@@ -342,6 +362,7 @@ class Wh40kCompanionController(http.Controller):
                     "total_match": partner.wh40k_total_match,
                     "win_rate": partner.wh40k_win_rate,
                 },
+                "pending_join_token": request.session.get("wh40k_pending_join") or "",
                 "rosters": [
                     {
                         "id": r.id,
@@ -456,7 +477,7 @@ class Wh40kCompanionController(http.Controller):
             if match.guest_id and match.state == "waiting":
                 raise UserError("A guest has already joined this match.")
             host_roster = match.host_roster_id
-            return {
+            payload = {
                 "ok": True,
                 "match_id": match.id,
                 "state": match.state,
@@ -487,6 +508,10 @@ class Wh40kCompanionController(http.Controller):
                 if host_roster
                 else None,
             }
+            pending = request.session.get("wh40k_pending_join")
+            if pending and match_token and pending == match_token:
+                request.session.pop("wh40k_pending_join", None)
+            return payload
         except Exception as exc:
             return self._error(exc)
 
@@ -814,14 +839,23 @@ class Wh40kCompanionController(http.Controller):
     @http.route(
         "/wh40k/join/<string:match_token>",
         type="http",
-        auth="user",
+        auth="public",
         website=False,
+        sitemap=False,
     )
     def join_redirect(self, match_token, **kwargs):
-        """HTTP entry for QR codes — open backend companion client action."""
-        action = request.env.ref(
-            "wh40k_companion.action_wh40k_companion_client", raise_if_not_found=False
-        )
-        if not action:
-            return request.redirect("/odoo")
-        return request.redirect(f"/odoo/action-{action.id}?wh40k_join={match_token}")
+        """QR / deep-link entry: stash token and open in-app join (after login if needed)."""
+        token = (match_token or "").strip()
+        if not re.match(r"^[a-fA-F0-9-]{16,64}$", token):
+            return request.redirect("/wh40k?error=Invalid+join+link")
+        request.session["wh40k_pending_join"] = token
+        if not request.session.uid:
+            return request.render(
+                "wh40k_companion.join_gate",
+                {
+                    "match_token": token,
+                    "login_url": f"/web/login?redirect=/wh40k/join/{token}",
+                    "signup_url": f"/wh40k/signup?join={token}",
+                },
+            )
+        return self._redirect_to_battle_app(join_token=token)

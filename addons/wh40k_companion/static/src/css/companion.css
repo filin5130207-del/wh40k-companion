@@ -25,6 +25,12 @@
     box-sizing: border-box;
 }
 
+.wh40k-app.wh40k-app-with-nav {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+}
+
 /*
  * Odoo backend client actions sit under .o_action_manager with a fixed
  * viewport height and overflow:hidden. Without an inner scroll pane, long
@@ -69,10 +75,106 @@
     color: var(--wh40k-accent);
 }
 
-.wh40k-nav {
+.wh40k-bottom-nav {
+    position: sticky;
+    bottom: 0;
+    z-index: 40;
+    margin-top: auto;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    align-items: end;
+    gap: 0.35rem;
+    margin-left: -1rem;
+    margin-right: -1rem;
+    margin-bottom: -1rem;
+    padding: 0.75rem 1rem 1.55rem;
+    padding-bottom: calc(1.55rem + env(safe-area-inset-bottom, 0px));
+    background:
+        linear-gradient(180deg, rgba(14, 19, 25, 0) 0%, rgba(14, 19, 25, 0.88) 28%, rgba(11, 15, 20, 0.97) 100%);
+    border-top: 1px solid rgba(51, 65, 85, 0.65);
+    backdrop-filter: blur(8px);
+}
+
+.wh40k-nav-circle {
+    appearance: none;
+    border: 1px solid var(--wh40k-border);
+    background: var(--wh40k-panel);
+    color: var(--wh40k-text);
+    width: 3.1rem;
+    height: 3.1rem;
+    border-radius: 50%;
+    margin: 0 auto;
+    padding: 0;
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.05rem;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.wh40k-nav-circle:hover {
+    transform: translateY(-2px);
+    border-color: var(--wh40k-accent);
+}
+
+.wh40k-nav-circle.active {
+    border-color: var(--wh40k-accent);
+    background: rgba(196, 92, 38, 0.22);
+    box-shadow: inset 0 0 0 1px rgba(196, 92, 38, 0.35);
+}
+
+.wh40k-nav-home {
+    width: 3.35rem;
+    height: 3.35rem;
+}
+
+.wh40k-nav-create {
+    background: var(--wh40k-accent);
+    border-color: var(--wh40k-accent);
+    color: #fff;
+}
+
+.wh40k-nav-create.active,
+.wh40k-nav-create:hover {
+    background: #d46a2f;
+    border-color: #d46a2f;
+    color: #fff;
+}
+
+.wh40k-nav-glyph {
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.wh40k-nav-plus {
+    font-size: 1.55rem;
+    font-weight: 600;
+    line-height: 0.85;
+}
+
+.wh40k-nav-label {
+    position: absolute;
+    left: 50%;
+    bottom: -1.15rem;
+    transform: translateX(-50%);
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--wh40k-muted);
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.wh40k-nav-circle.active .wh40k-nav-label {
+    color: var(--wh40k-text);
+}
+
+.wh40k-nav-create .wh40k-nav-label {
+    color: #f3d2bf;
 }
 
 .wh40k-btn {

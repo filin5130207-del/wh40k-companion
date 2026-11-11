@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <template id="landing_page" name="WH40k Companion Landing">
-        <t t-call="web.layout">
-            <t t-set="head">
-                <link rel="stylesheet" type="text/css" href="/wh40k_companion/static/src/css/companion.css"/>
-                <style>
-                    body { margin: 0; background: #0e1319; }
-                    .wh40k-public { max-width: 520px; margin: 4rem auto; padding: 1rem; }
-                </style>
-            </t>
+        <t t-set="head">
+            <link rel="stylesheet" type="text/css" href="/wh40k_companion/static/src/css/companion.css"/>
+            <style>
+                body { margin: 0; background: #0e1319; }
+                .wh40k-public { max-width: 520px; margin: 4rem auto; padding: 1rem; }
+            </style>
+        </t>
+        <t t-call="web.layout" head="head">
             <div class="wh40k-app wh40k-public">
                 <header class="wh40k-header">
                     <h1 class="wh40k-brand">WH40k <span>Companion</span></h1>
@@ -28,14 +28,14 @@
     </template>
 
     <template id="signup_page" name="WH40k Companion Signup">
-        <t t-call="web.layout">
-            <t t-set="head">
-                <link rel="stylesheet" type="text/css" href="/wh40k_companion/static/src/css/companion.css"/>
-                <style>
-                    body { margin: 0; background: #0e1319; }
-                    .wh40k-public { max-width: 520px; margin: 3rem auto; padding: 1rem; }
-                </style>
-            </t>
+        <t t-set="head">
+            <link rel="stylesheet" type="text/css" href="/wh40k_companion/static/src/css/companion.css"/>
+            <style>
+                body { margin: 0; background: #0e1319; }
+                .wh40k-public { max-width: 520px; margin: 3rem auto; padding: 1rem; }
+            </style>
+        </t>
+        <t t-call="web.layout" head="head">
             <div class="wh40k-app wh40k-public">
                 <header class="wh40k-header">
                     <h1 class="wh40k-brand">WH40k <span>Companion</span></h1>
@@ -46,17 +46,41 @@
                     <div t-if="error" class="wh40k-error" t-out="error"/>
                     <form action="/wh40k/signup" method="post">
                         <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                        <input type="hidden" name="join" t-att-value="join or ''"/>
                         <label class="wh40k-muted">Email</label>
                         <input class="wh40k-input" type="email" name="email" required="required" t-att-value="email"/>
                         <label class="wh40k-muted">Пароль</label>
                         <input class="wh40k-input" type="password" name="password" required="required" minlength="8"/>
                         <label class="wh40k-muted">Никнейм</label>
                         <input class="wh40k-input" type="text" name="nickname" required="required" minlength="3" t-att-value="nickname" placeholder="GogoGogo207"/>
+                        <p t-if="join" class="wh40k-muted">После регистрации вы сразу попадёте в приглашение на матч.</p>
                         <div class="wh40k-row">
                             <button class="wh40k-btn wh40k-btn-primary" type="submit">Создать профиль</button>
                             <a class="wh40k-btn" href="/wh40k">Назад</a>
                         </div>
                     </form>
+                </section>
+            </div>
+        </t>
+    </template>
+
+    <template id="join_gate" name="WH40k Companion Join Gate">
+        <t t-set="head">
+            <link rel="stylesheet" type="text/css" href="/wh40k_companion/static/src/css/companion.css"/>
+            <style>
+                body { margin: 0; background: #0e1319; }
+                .wh40k-public { max-width: 520px; margin: 4rem auto; padding: 1rem; }
+            </style>
+        </t>
+        <t t-call="web.layout" head="head">
+            <div class="wh40k-app wh40k-public">
+                <section class="wh40k-panel">
+                    <h2>Приглашение в матч</h2>
+                    <p class="wh40k-muted">Войдите или зарегистрируйтесь — после этого откроется приглашение в Battle App (без копирования ссылки).</p>
+                    <div class="wh40k-row">
+                        <a class="wh40k-btn wh40k-btn-primary" t-att-href="login_url">Войти и присоединиться</a>
+                        <a class="wh40k-btn wh40k-btn-success" t-att-href="signup_url">Регистрация</a>
+                    </div>
                 </section>
             </div>
         </t>

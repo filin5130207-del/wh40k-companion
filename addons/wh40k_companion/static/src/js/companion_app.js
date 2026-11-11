@@ -8,12 +8,44 @@ import { standardActionServiceProps } from "@web/webclient/actions/action_plugin
 function extractJoinToken() {
     const hash = window.location.hash || "";
     const query = window.location.search || "";
+    const path = window.location.pathname || "";
     const fromHash = hash.match(/wh40k_join=([^&]+)/);
     if (fromHash) {
         return decodeURIComponent(fromHash[1]);
     }
-    const params = new URLSearchParams(query);
-    return params.get("wh40k_join") || "";
+    const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
+    const fromQuery = params.get("wh40k_join") || params.get("join") || "";
+    if (fromQuery) {
+        return fromQuery;
+    }
+    const fromPath = path.match(/\/wh40k\/join\/([a-f0-9-]+)/i);
+    if (fromPath) {
+        return fromPath[1];
+    }
+    try {
+        return sessionStorage.getItem("wh40k_join") || "";
+    } catch (_e) {
+        return "";
+    }
+}
+
+function rememberJoinToken(token) {
+    if (!token) {
+        return;
+    }
+    try {
+        sessionStorage.setItem("wh40k_join", token);
+    } catch (_e) {
+        // ignore quota / private mode
+    }
+}
+
+function clearRememberedJoinToken() {
+    try {
+        sessionStorage.removeItem("wh40k_join");
+    } catch (_e) {
+        // ignore
+    }
 }
 
 function parseOdooDatetime(value) {
@@ -34,8 +66,12 @@ export class Wh40kCompanionApp extends Component {
     rosterFile = signal.ref();
 
     setup() {
+        const initialJoinToken = extractJoinToken();
+        if (initialJoinToken) {
+            rememberJoinToken(initialJoinToken);
+        }
         this.state = proxy({
-            screen: "dashboard",
+            screen: "home",
             busy: false,
             error: "",
             needsNickname: false,
@@ -63,8 +99,8 @@ export class Wh40kCompanionApp extends Component {
                 remaining_ms: 15 * 60 * 1000,
             },
             join: {
-                token: extractJoinToken(),
-                step: "token", // token | invite | selecting
+                token: initialJoinToken,
+                step: initialJoinToken ? "loading" : "token", // loading | token | invite | selecting
                 verified: false,
                 host_nickname: "",
                 host_roster_name: "",
@@ -103,6 +139,8 @@ export class Wh40kCompanionApp extends Component {
                 this.state.screen = "nickname";
             } else if (this.state.join.token) {
                 this.state.screen = "join";
+                this.state.join.step = "loading";
+                await this.verifyToken();
             }
         });
 
@@ -124,6 +162,12 @@ export class Wh40kCompanionApp extends Component {
     get eligibleHostRosters() {
         const limit = parseInt(this.state.create.points, 10);
         return (this.state.rosters || []).filter((r) => r.points_used <= limit);
+    }
+
+    get showBottomNav() {
+        return ["home", "dashboard", "rosters", "create_match", "join", "import_preview"].includes(
+            this.state.screen
+        );
     }
 
     get qrImageUrl() {
@@ -234,7 +278,15 @@ export class Wh40kCompanionApp extends Component {
 
     setScreen(screen) {
         this.state.error = "";
-        this.state.screen = screen;
+        this.state.screen = screen === "dashboard" ? "home" : screen;
+    }
+
+    openManualJoin() {
+        this.state.error = "";
+        if (!this.state.join.verified) {
+            this.state.join.step = "token";
+        }
+        this.state.screen = "join";
     }
 
     setError(err) {
@@ -256,6 +308,13 @@ export class Wh40kCompanionApp extends Component {
         this.state.player = data.player;
         this.state.rosters = data.rosters || [];
         this.state.needsNickname = !(data.player && data.player.has_nickname);
+        const pending = (data.pending_join_token || "").trim();
+        if (pending && !this.state.join.token) {
+            this.state.join.token = pending;
+            rememberJoinToken(pending);
+        } else if (pending && pending === this.state.join.token) {
+            rememberJoinToken(pending);
+        }
     }
 
     async loadMissions() {
@@ -277,7 +336,13 @@ export class Wh40kCompanionApp extends Component {
             await this.loadDashboard();
             this.state.needsNickname = false;
             this.state.busy = false;
-            this.setScreen("dashboard");
+            if (this.state.join.token) {
+                this.state.screen = "join";
+                this.state.join.step = "loading";
+                await this.verifyToken();
+            } else {
+                this.setScreen("home");
+            }
         } catch (e) {
             this.setError(e.message);
         }
@@ -317,7 +382,7 @@ export class Wh40kCompanionApp extends Component {
         if (fileInput) {
             fileInput.value = "";
         }
-        this.setScreen("dashboard");
+        this.setScreen("rosters");
     }
 
     async confirmImportRoster() {
@@ -338,7 +403,7 @@ export class Wh40kCompanionApp extends Component {
             if (fileInput) {
                 fileInput.value = "";
             }
-            this.setScreen("dashboard");
+            this.setScreen("rosters");
         } catch (e) {
             this.setError(e.message);
         }
@@ -424,7 +489,7 @@ export class Wh40kCompanionApp extends Component {
                         ? "Время ожидания истекло. Матч отменён."
                         : reason
                 );
-                this.setScreen("dashboard");
+                this.setScreen("home");
             }
         } catch (e) {
             // keep polling
@@ -437,12 +502,12 @@ export class Wh40kCompanionApp extends Component {
 
     async cancelWaiting() {
         if (!this.state.waiting.match_id) {
-            this.setScreen("dashboard");
+            this.setScreen("home");
             return;
         }
         try {
             await this.rpc("/wh40k/match/cancel", { match_id: this.state.waiting.match_id });
-            this.setScreen("dashboard");
+            this.setScreen("home");
         } catch (e) {
             this.setError(e.message);
         }
@@ -459,15 +524,20 @@ export class Wh40kCompanionApp extends Component {
             value = decodeURIComponent(hashMatch[1]);
         }
         this.state.join.token = value;
+        rememberJoinToken(value);
     }
 
     async verifyToken() {
         if (!this.state.join.token) {
             this.setError("Enter a match token.");
+            this.state.join.step = "token";
             return;
         }
         try {
             this.state.busy = true;
+            if (this.state.screen === "join" && this.state.join.step !== "invite") {
+                this.state.join.step = "loading";
+            }
             const verified = await this.rpc("/wh40k/match/verify", {
                 match_token: this.state.join.token,
             });
@@ -481,8 +551,10 @@ export class Wh40kCompanionApp extends Component {
             this.state.join.host_roster_points = verified.host_roster?.points_used || "";
             this.state.join.rosters = [];
             this.state.join.roster_id = null;
+            clearRememberedJoinToken();
             this.state.busy = false;
         } catch (e) {
+            this.state.join.step = "token";
             this.setError(e.message);
         }
     }
@@ -503,6 +575,7 @@ export class Wh40kCompanionApp extends Component {
     }
 
     declineInvite() {
+        clearRememberedJoinToken();
         this.state.join = {
             token: "",
             step: "token",
@@ -516,7 +589,7 @@ export class Wh40kCompanionApp extends Component {
             rosters: [],
             roster_id: null,
         };
-        this.setScreen("dashboard");
+        this.setScreen("home");
     }
 
     selectGuestRoster(id) {
