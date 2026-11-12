@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <template id="pwa_shell" name="WH40k Battle App PWA">
-        <!DOCTYPE html>
         <html lang="ru">
             <head>
                 <meta charset="utf-8"/>
