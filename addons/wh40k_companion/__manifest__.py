@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.15.0",
+    "version": "20.0.1.16.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,12 +11,11 @@ create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
-20.0.1.15.0 highlights:
-- Record ACL domains (rosters/units/matches) + Player/Manager groups
-- Match unit lines ORM (replaces live unit_state JSON as source of truth)
-- Local join-URL QR (no public QR CDN proxy)
-- OWL store/components + error boundary; match long-poll /watch + bus notify
-- i18n skeleton (EN sources + ru.po)
+20.0.1.16.0 highlights:
+- Expanded automated TransactionCase/HttpCase coverage (parser, roster, match
+  lifecycle, unit lines/undo/migration, security/stats, HTTP API, PWA assets)
+- Pure JS battle_helpers + Node unit tests for store/wound math
+- Prior 20.0.1.15.0: ACL domains, unit lines ORM, local QR, OWL/watch, i18n
 """,
     "author": "WH40k Companion",
     "license": "LGPL-3",

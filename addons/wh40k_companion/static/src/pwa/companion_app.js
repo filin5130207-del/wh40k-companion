@@ -9,6 +9,13 @@ import {
     clearRememberedJoinToken,
     parseOdooDatetime,
     createBattleStore,
+    filterEligibleRosters,
+    snapshotUnit,
+    pushUndoEntry,
+    popUndoEntry,
+    applyUnitFieldDelta,
+    destroyUnitInPlace,
+    UNDO_STACK_LIMIT,
 } from "./battle_store";
 import { Wh40kErrorBoundary } from "./error_boundary";
 import {
@@ -86,8 +93,7 @@ export class Wh40kCompanionApp extends Component {
     }
 
     get eligibleHostRosters() {
-        const limit = parseInt(this.state.create.points, 10);
-        return (this.state.rosters || []).filter((r) => r.points_used <= limit);
+        return filterEligibleRosters(this.state.rosters, this.state.create.points);
     }
 
     get showBottomNav() {
@@ -141,7 +147,7 @@ export class Wh40kCompanionApp extends Component {
         return `${mm}:${ss}`;
     }
 
-    static UNDO_STACK_LIMIT = 20;
+    static UNDO_STACK_LIMIT = UNDO_STACK_LIMIT;
 
     get ownSideKey() {
         if (!this.state.match) {
@@ -983,11 +989,7 @@ export class Wh40kCompanionApp extends Component {
     }
 
     _snapshotUnit(unit) {
-        return {
-            models_remaining: unit.models_remaining,
-            wounds_remaining: unit.wounds_remaining,
-            destroyed: !!unit.destroyed,
-        };
+        return snapshotUnit(unit);
     }
 
     _cloneUnitState() {
@@ -999,14 +1001,12 @@ export class Wh40kCompanionApp extends Component {
     }
 
     _pushUndo(unit) {
-        const key = this._undoKey(unit);
-        const undo = { ...(this.state.unitState.undo || {}) };
-        const stack = [...(undo[key] || [])];
-        stack.push(this._snapshotUnit(unit));
-        if (stack.length > Wh40kCompanionApp.UNDO_STACK_LIMIT) {
-            stack.splice(0, stack.length - Wh40kCompanionApp.UNDO_STACK_LIMIT);
-        }
-        undo[key] = stack;
+        const undo = pushUndoEntry(
+            this.state.unitState.undo || {},
+            unit.unit_id,
+            snapshotUnit(unit),
+            Wh40kCompanionApp.UNDO_STACK_LIMIT
+        );
         this.state.unitState = {
             host: [...(this.state.unitState.host || [])],
             guest: [...(this.state.unitState.guest || [])],
@@ -1079,20 +1079,8 @@ export class Wh40kCompanionApp extends Component {
             return;
         }
         this._pushUndo(unit);
-        if (field === "wounds") {
-            unit.wounds_remaining = Math.max(0, Math.min(unit.wounds, unit.wounds_remaining + delta));
-            if (unit.wounds_remaining === 0) {
-                unit.models_remaining = 0;
-                unit.destroyed = true;
-                this.vibrate();
-            }
-        } else if (field === "models") {
-            unit.models_remaining = Math.max(0, Math.min(unit.models, unit.models_remaining + delta));
-            if (unit.models_remaining === 0) {
-                unit.wounds_remaining = 0;
-                unit.destroyed = true;
-                this.vibrate();
-            }
+        if (applyUnitFieldDelta(unit, field, delta)) {
+            this.vibrate();
         }
         this.state.unitState = this._cloneUnitState();
         try {
@@ -1107,9 +1095,7 @@ export class Wh40kCompanionApp extends Component {
             return;
         }
         this._pushUndo(unit);
-        unit.models_remaining = 0;
-        unit.wounds_remaining = 0;
-        unit.destroyed = true;
+        destroyUnitInPlace(unit);
         this.vibrate();
         this.state.unitState = this._cloneUnitState();
         try {
@@ -1123,17 +1109,12 @@ export class Wh40kCompanionApp extends Component {
         if (!this.canUndo(unit)) {
             return;
         }
-        const key = this._undoKey(unit);
-        const undo = { ...(this.state.unitState.undo || {}) };
-        const stack = [...(undo[key] || [])];
-        const prev = stack.pop();
+        const { undo, snapshot: prev } = popUndoEntry(
+            this.state.unitState.undo || {},
+            unit.unit_id
+        );
         if (!prev) {
             return;
-        }
-        if (stack.length) {
-            undo[key] = stack;
-        } else {
-            delete undo[key];
         }
         unit.models_remaining = prev.models_remaining;
         unit.wounds_remaining = prev.wounds_remaining;
