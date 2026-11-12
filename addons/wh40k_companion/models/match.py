@@ -166,7 +166,8 @@ class Wh40kMatch(models.Model):
         """Guest accepted invite card: waiting → selecting (claim guest seat)."""
         self.ensure_one()
         if self.is_waiting_expired():
-            self.action_cancel(reason="Waiting timeout expired")
+            # Guest is not yet in the match ACL domain; cancel under checked sudo.
+            self.sudo().action_cancel(reason="Waiting timeout expired")
             raise UserError("Waiting timeout expired. Match was cancelled.")
         if self.state != "waiting":
             raise UserError("This match is not waiting for a guest.")
@@ -174,13 +175,15 @@ class Wh40kMatch(models.Model):
             raise UserError("A guest has already joined this match.")
         if guest_partner.id == self.host_id.id:
             raise UserError("Host cannot join as guest.")
-        self.write({"state": "selecting", "guest_id": guest_partner.id})
+        # Claiming the seat must elevate: player ACL is host|guest, and guest_id
+        # is still empty. Strangers remain blocked by the checks above.
+        self.sudo().write({"state": "selecting", "guest_id": guest_partner.id})
         return True
 
     def action_join(self, guest_partner, guest_roster):
         self.ensure_one()
         if self.is_waiting_expired() and self.state == "waiting":
-            self.action_cancel(reason="Waiting timeout expired")
+            self.sudo().action_cancel(reason="Waiting timeout expired")
             raise UserError("Waiting timeout expired. Match was cancelled.")
         if self.state not in ("waiting", "selecting"):
             raise UserError("This match is not open for joining.")
@@ -194,16 +197,20 @@ class Wh40kMatch(models.Model):
             raise ValidationError(
                 f"Guest roster points ({guest_roster.points_used}) exceed match limit ({self.points})."
             )
-        self.write(
+        # Elevate only after checks: (1) waiting→active may set guest_id for the
+        # first time (outside host|guest ACL), (2) unit-line rebuild reads host
+        # roster units the guest cannot read under roster ACL.
+        match_sudo = self.sudo()
+        match_sudo.write(
             {
                 "guest_id": guest_partner.id,
                 "guest_roster_id": guest_roster.id,
                 "state": "active",
             }
         )
-        self._rebuild_unit_lines(self.host_roster_id, guest_roster)
-        self._sync_legacy_unit_state()
-        self._notify_match_changed()
+        match_sudo._rebuild_unit_lines(match_sudo.host_roster_id, guest_roster)
+        match_sudo._sync_legacy_unit_state()
+        match_sudo._notify_match_changed()
         return True
 
     def _side_line_vals(self, roster, side):

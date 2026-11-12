@@ -80,9 +80,14 @@ class TestWh40kAclAndUnitLines(TransactionCase):
         self.assertFalse(
             self.env["wh40k.match"].with_user(self.user_b).search([("id", "=", match.id)])
         )
+        # Direct guest write without method checks stays blocked (not yet guest).
+        with self.assertRaises(AccessError):
+            match.with_user(self.user_b).write({"state": "selecting"})
         # Token capability still works.
         found = self.env["wh40k.match"].with_user(self.user_b).find_by_token(match.match_token)
         self.assertEqual(found.id, match.id)
+        # Accept must work as the real guest user (no ambient sudo): method
+        # elevates only after host/seat checks so strangers stay blocked.
         found.with_user(self.user_b).action_accept_invite(self.user_b.partner_id)
         self.assertEqual(found.guest_id, self.user_b.partner_id)
         # After accept, guest can search the match.
