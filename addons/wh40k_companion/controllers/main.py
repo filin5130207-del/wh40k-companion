@@ -653,6 +653,10 @@ class Wh40kCompanionController(http.Controller):
                 # Host can always read; guest after join
                 if match.host_id.id != partner.id:
                     raise AccessError("Not a participant of this match.")
+            # Cancel expired waiting matches on poll so the host is not stuck
+            # on the QR screen until the 5-minute cron fires.
+            if match.state == "waiting" and match.is_waiting_expired():
+                match.action_cancel(reason="Таймаут ожидания противника")
             unit_state = {}
             try:
                 unit_state = json.loads(match.unit_state or "{}")
@@ -747,14 +751,25 @@ class Wh40kCompanionController(http.Controller):
             return self._error(exc)
 
     @http.route("/wh40k/match/cancel", type="jsonrpc", auth="user")
-    def match_cancel(self, match_id=None, **kwargs):
+    def match_cancel(self, match_id=None, reason=None, **kwargs):
         try:
             partner = self._partner()
             match = request.env["wh40k.match"].browse(int(match_id))
             if not match.exists() or match.host_id.id != partner.id:
                 raise UserError("Match not found.")
-            match.action_cancel(reason="Отменено хостом")
-            return {"ok": True, "state": match.state}
+            if match.state == "cancelled":
+                return {
+                    "ok": True,
+                    "state": match.state,
+                    "cancel_reason": match.cancel_reason or "",
+                }
+            cancel_reason = (reason or "").strip() or "Отменено хостом"
+            match.action_cancel(reason=cancel_reason)
+            return {
+                "ok": True,
+                "state": match.state,
+                "cancel_reason": match.cancel_reason or "",
+            }
         except Exception as exc:
             return self._error(exc)
 

@@ -147,6 +147,7 @@ export class Wh40kCompanionApp extends Component {
         this._poll = null;
         this._countdown = null;
         this._finishingMatch = false;
+        this._waitingTimeoutHandled = false;
 
         onWillStart(async () => {
             await this.loadDashboard();
@@ -575,12 +576,56 @@ export class Wh40kCompanionApp extends Component {
                 expires_at: published.expires_at,
                 remaining_ms: (published.waiting_seconds || 900) * 1000,
             };
+            this._waitingTimeoutHandled = false;
             this.tickCountdown();
             this.state.busy = false;
             this.setScreen("waiting");
         } catch (e) {
             this.setError(e.message);
         }
+    }
+
+    clearWaitingState() {
+        this.state.waiting = {
+            match_id: null,
+            join_url: "",
+            match_token: "",
+            published_at: null,
+            expires_at: null,
+            remaining_ms: 15 * 60 * 1000,
+        };
+    }
+
+    /**
+     * 15min waiting timer expired (or server cancelled for timeout):
+     * cancel server-side if still waiting, then land on home dashboard.
+     */
+    async leaveWaitingAfterTimeout(message) {
+        if (this._waitingTimeoutHandled) {
+            return;
+        }
+        this._waitingTimeoutHandled = true;
+        const matchId = this.state.waiting.match_id;
+        try {
+            if (matchId) {
+                await this.rpc("/wh40k/match/cancel", {
+                    match_id: matchId,
+                    reason: "Таймаут ожидания противника",
+                });
+            }
+        } catch (_e) {
+            // Already cancelled by cron / concurrent poll — still go home.
+        }
+        this.clearWaitingState();
+        try {
+            await this.loadDashboard();
+        } catch (_e) {
+            // still navigate home
+        }
+        this.setScreen("home");
+        this.state.error =
+            message || "Время ожидания истекло. Матч отменён.";
+        this.state.busy = false;
     }
 
     tickCountdown() {
@@ -594,8 +639,10 @@ export class Wh40kCompanionApp extends Component {
             this.state.waiting.remaining_ms = Math.max(0, this.state.waiting.remaining_ms - 1000);
         }
         if (this.state.waiting.remaining_ms <= 0 && this.state.waiting.match_id) {
-            // Soft UX; cron / poll will cancel server-side.
-            this.state.error = "Время ожидания истекло. Матч будет отменён.";
+            // Do not leave the host stuck on the waiting/QR screen.
+            this.leaveWaitingAfterTimeout(
+                "Время ожидания истекло. Матч отменён."
+            );
         }
     }
 
@@ -624,12 +671,28 @@ export class Wh40kCompanionApp extends Component {
                 await this.enterGame(data.match.id);
             } else if (data.match.state === "cancelled") {
                 const reason = data.match.cancel_reason || "Матч отменён.";
-                this.setError(
-                    reason.includes("Таймаут")
-                        ? "Время ожидания истекло. Матч отменён."
-                        : reason
+                const isTimeout = reason.includes("Таймаут");
+                if (isTimeout) {
+                    await this.leaveWaitingAfterTimeout(
+                        "Время ожидания истекло. Матч отменён."
+                    );
+                } else {
+                    this.clearWaitingState();
+                    this.setScreen("home");
+                    this.state.error = reason;
+                    try {
+                        await this.loadDashboard();
+                    } catch (_e) {
+                        // ignore
+                    }
+                }
+            } else if (
+                data.match.state === "waiting" &&
+                this.state.waiting.remaining_ms <= 0
+            ) {
+                await this.leaveWaitingAfterTimeout(
+                    "Время ожидания истекло. Матч отменён."
                 );
-                this.setScreen("home");
             }
         } catch (e) {
             // keep polling
@@ -742,11 +805,21 @@ export class Wh40kCompanionApp extends Component {
 
     async cancelWaiting() {
         if (!this.state.waiting.match_id) {
+            this.clearWaitingState();
             this.setScreen("home");
             return;
         }
         try {
-            await this.rpc("/wh40k/match/cancel", { match_id: this.state.waiting.match_id });
+            await this.rpc("/wh40k/match/cancel", {
+                match_id: this.state.waiting.match_id,
+            });
+            this.clearWaitingState();
+            this._waitingTimeoutHandled = true;
+            try {
+                await this.loadDashboard();
+            } catch (_e) {
+                // ignore
+            }
             this.setScreen("home");
         } catch (e) {
             this.setError(e.message);
