@@ -257,8 +257,6 @@
         <button class="wh40k-btn wh40k-btn-primary" t-on-click="this.createAndPublish" t-att-disabled="this.state.busy">
             Создать
         </button>
-        <p class="wh40k-muted" style="margin-top: 1rem;">Уже есть QR от хоста?</p>
-        <button class="wh40k-btn" t-on-click="this.openManualJoin">Присоединиться по ссылке</button>
     </section>
 </t>
 
