@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.11.0",
+    "version": "20.0.1.12.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,7 +11,7 @@ create matches with QR join codes, and track wounds during games.
 """,
     "author": "WH40k Companion",
     "license": "LGPL-3",
-    "depends": ["base", "web", "mail", "auth_signup"],
+    "depends": ["base", "web", "web_tour", "mail", "auth_signup"],
     "data": [
         "security/wh40k_security.xml",
         "security/ir.access.csv",
@@ -28,6 +28,9 @@ create matches with QR join codes, and track wounds during games.
     "assets": {
         "web.assets_backend": [
             "wh40k_companion/static/src/css/companion.css",
+            # Load before companion_app so TourPlugin.resumeTour is patched
+            # before Battle App / QR join bootstraps.
+            "wh40k_companion/static/src/js/tour_resume_guard.js",
             "wh40k_companion/static/src/js/companion_app.js",
             "wh40k_companion/static/src/xml/companion_templates.xml",
         ],

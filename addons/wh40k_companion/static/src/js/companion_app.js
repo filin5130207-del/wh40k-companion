@@ -4,6 +4,15 @@ import { Component, proxy, signal, onWillStart, onMounted, onWillUnmount, usePro
 import { registry } from "@web/core/registry";
 import { rpc } from "@web/core/network/rpc";
 import { standardActionServiceProps } from "@web/webclient/actions/action_plugin";
+import { tourState } from "@web_tour/tour_state";
+
+function clearStaleTourState() {
+    try {
+        tourState.clear();
+    } catch (_e) {
+        // Tour state missing / private mode — ignore
+    }
+}
 
 function extractJoinToken() {
     const hash = window.location.hash || "";
@@ -69,6 +78,8 @@ export class Wh40kCompanionApp extends Component {
         const initialJoinToken = extractJoinToken();
         if (initialJoinToken) {
             rememberJoinToken(initialJoinToken);
+            // Avoid TourPlugin.resumeTour crash over #wh40k_join=... deep links.
+            clearStaleTourState();
         }
         this.state = proxy({
             screen: "home",
@@ -129,11 +140,13 @@ export class Wh40kCompanionApp extends Component {
                 you_won: false,
                 you_surrendered: false,
                 message: "",
+                show_on_home: false,
             },
             pendingRosterJson: null,
         });
         this._poll = null;
         this._countdown = null;
+        this._finishingMatch = false;
 
         onWillStart(async () => {
             await this.loadDashboard();
@@ -148,7 +161,8 @@ export class Wh40kCompanionApp extends Component {
         });
 
         onMounted(() => {
-            this._poll = setInterval(() => this.pollWaiting(), 5000);
+            // Waiting room + active game both poll through the same ticker.
+            this._poll = setInterval(() => this.pollMatchLifecycle(), 5000);
             this._countdown = setInterval(() => this.tickCountdown(), 1000);
         });
 
@@ -179,6 +193,7 @@ export class Wh40kCompanionApp extends Component {
             "join",
             "import_preview",
             "game",
+            "result",
         ].includes(this.state.screen);
     }
 
@@ -584,6 +599,16 @@ export class Wh40kCompanionApp extends Component {
         }
     }
 
+    async pollMatchLifecycle() {
+        if (this.state.screen === "waiting" && this.state.waiting.match_id) {
+            await this.pollWaiting();
+            return;
+        }
+        if (this.state.screen === "game" && this.state.match && this.state.match.id) {
+            await this.pollActiveMatch();
+        }
+    }
+
     async pollWaiting() {
         if (this.state.screen !== "waiting" || !this.state.waiting.match_id) {
             return;
@@ -611,8 +636,108 @@ export class Wh40kCompanionApp extends Component {
         }
     }
 
+    async pollActiveMatch() {
+        if (this._finishingMatch || !this.state.match || !this.state.match.id) {
+            return;
+        }
+        try {
+            const data = await this.rpc("/wh40k/match/state", {
+                match_id: this.state.match.id,
+            });
+            const match = data.match || {};
+            if (match.state === "finished") {
+                await this.goHomeAfterMatchEnd({
+                    winner_id: match.winner_id,
+                    winner_nickname: match.winner_nickname || "",
+                    host: match.host,
+                    guest: match.guest,
+                    is_host: !!match.is_host,
+                    you_surrendered: false,
+                });
+            } else if (match.state === "cancelled") {
+                this.state.activeMatch = null;
+                this.state.match = null;
+                this.setError(match.cancel_reason || "Матч отменён.");
+                this.setScreen("home");
+            }
+        } catch (_e) {
+            // keep polling
+        }
+    }
+
+    dismissMatchResultBanner() {
+        this.state.result = {
+            ...this.state.result,
+            show_on_home: false,
+            message: "",
+        };
+    }
+
+    /**
+     * Both players leave the game/result screens and land on the home
+     * dashboard (with bottom nav). Optional banner summarizes the outcome.
+     */
+    async goHomeAfterMatchEnd({
+        winner_id = null,
+        winner_nickname = "",
+        host = null,
+        guest = null,
+        is_host = false,
+        you_won = null,
+        you_surrendered = false,
+        message = "",
+    } = {}) {
+        if (this._finishingMatch) {
+            return;
+        }
+        this._finishingMatch = true;
+        try {
+            let resolvedWinnerNick = (winner_nickname || "").trim();
+            if (!resolvedWinnerNick && winner_id) {
+                if (host && host.id === winner_id) {
+                    resolvedWinnerNick = host.nickname || "";
+                } else if (guest && guest.id === winner_id) {
+                    resolvedWinnerNick = guest.nickname || "";
+                }
+            }
+            let resolvedYouWon = you_won;
+            if (resolvedYouWon == null && winner_id && host && guest) {
+                const myId = is_host ? host.id : guest.id;
+                resolvedYouWon = myId === winner_id;
+            }
+            resolvedYouWon = !!resolvedYouWon;
+            const resolvedMessage =
+                message ||
+                (you_surrendered
+                    ? "Поражение. Вы сдались."
+                    : resolvedYouWon
+                      ? "Победа! Противник сдался."
+                      : "Матч завершён.");
+            this.state.result = {
+                winner_nickname: resolvedWinnerNick,
+                you_won: resolvedYouWon,
+                you_surrendered: !!you_surrendered,
+                message: resolvedMessage,
+                show_on_home: true,
+            };
+            this.state.showSurrenderModal = false;
+            this.state.activeMatch = null;
+            this.state.match = null;
+            this.state.datasheet = null;
+            try {
+                await this.loadDashboard();
+            } catch (_e) {
+                // still navigate home even if dashboard refresh fails
+            }
+            this.state.busy = false;
+            this.setScreen("home");
+        } finally {
+            this._finishingMatch = false;
+        }
+    }
+
     async refreshMatch() {
-        await this.pollWaiting();
+        await this.pollMatchLifecycle();
     }
 
     async cancelWaiting() {
@@ -1025,17 +1150,13 @@ export class Wh40kCompanionApp extends Component {
             const result = await this.rpc("/wh40k/match/surrender", {
                 match_id: this.state.match.id,
             });
-            this.state.result = {
-                winner_nickname: result.winner_nickname,
+            await this.goHomeAfterMatchEnd({
+                winner_id: result.winner_id,
+                winner_nickname: result.winner_nickname || "",
                 you_won: !!result.you_won,
                 you_surrendered: !!result.you_surrendered,
                 message: result.message || "",
-            };
-            this.state.activeMatch = null;
-            this.state.match = null;
-            this.state.busy = false;
-            await this.loadDashboard();
-            this.setScreen("result");
+            });
         } catch (e) {
             this.setError(e.message);
         }

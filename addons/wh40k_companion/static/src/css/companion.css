@@ -144,7 +144,8 @@
     color: #fff;
 }
 
-.wh40k-resume-banner {
+.wh40k-resume-banner,
+.wh40k-result-banner {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -156,6 +157,18 @@
     border-radius: 0.65rem;
     background:
         linear-gradient(135deg, rgba(196, 92, 38, 0.22), rgba(61, 139, 110, 0.1));
+}
+
+.wh40k-result-banner.wh40k-result-win {
+    border-color: rgba(61, 139, 110, 0.65);
+    background:
+        linear-gradient(135deg, rgba(61, 139, 110, 0.22), rgba(196, 92, 38, 0.08));
+}
+
+.wh40k-result-banner.wh40k-result-loss {
+    border-color: rgba(160, 64, 48, 0.65);
+    background:
+        linear-gradient(135deg, rgba(160, 64, 48, 0.2), rgba(61, 139, 110, 0.06));
 }
 
 .wh40k-resume-copy {

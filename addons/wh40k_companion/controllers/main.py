@@ -694,6 +694,11 @@ class Wh40kCompanionController(http.Controller):
                     "host_roster_id": match.host_roster_id.id,
                     "guest_roster_id": match.guest_roster_id.id,
                     "winner_id": match.winner_id.id if match.winner_id else None,
+                    "winner_nickname": (
+                        (match.winner_id.wh40k_nickname or match.winner_id.name)
+                        if match.winner_id
+                        else ""
+                    ),
                     "unit_state": unit_state,
                     "is_host": match.host_id.id == partner.id,
                 },

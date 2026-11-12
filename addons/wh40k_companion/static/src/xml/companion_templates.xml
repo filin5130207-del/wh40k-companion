@@ -79,6 +79,24 @@
 <t t-name="wh40k_companion.HomeScreen">
     <section class="wh40k-panel">
         <h2>Личный кабинет</h2>
+        <t t-if="this.state.result.show_on_home &amp;&amp; this.state.result.message">
+            <div class="wh40k-result-banner" role="status"
+                 t-att-class="{'wh40k-result-win': this.state.result.you_won, 'wh40k-result-loss': !this.state.result.you_won}">
+                <div class="wh40k-resume-copy">
+                    <strong t-out="this.state.result.you_won ? 'Победа!' : 'Матч завершён'"/>
+                    <p class="wh40k-muted" style="margin: 0.25rem 0 0;"
+                       t-out="this.state.result.message"/>
+                    <p t-if="this.state.result.winner_nickname" class="wh40k-muted"
+                       style="margin: 0.25rem 0 0;">
+                        Победитель: <t t-out="this.state.result.winner_nickname"/>
+                    </p>
+                </div>
+                <button type="button" class="wh40k-btn"
+                        t-on-click="this.dismissMatchResultBanner">
+                    Закрыть
+                </button>
+            </div>
+        </t>
         <t t-if="this.state.activeMatch">
             <div class="wh40k-resume-banner" role="status">
                 <div class="wh40k-resume-copy">
@@ -488,7 +506,7 @@
         <h2 t-out="this.state.result.you_won ? 'Победа!' : 'Поражение'"/>
         <p style="font-size: 1.2rem; font-weight: 600;" t-out="this.state.result.message"/>
         <p class="wh40k-muted">Победитель: <t t-out="this.state.result.winner_nickname"/></p>
-        <button class="wh40k-btn wh40k-btn-primary" t-on-click="() => this.setScreen('dashboard')">На главный экран</button>
+        <button class="wh40k-btn wh40k-btn-primary" t-on-click="() => this.setScreen('home')">На главный экран</button>
     </section>
 </t>
 
