@@ -1,0 +1,53 @@
+# Translation template for wh40k_companion.
+msgid ""
+msgstr ""
+"Project-Id-Version: wh40k_companion 20.0.1.15.0\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. module: wh40k_companion
+#: model:ir.module.category,name:wh40k_companion.module_category_wh40k
+msgid "WH40k Companion"
+msgstr ""
+
+#. module: wh40k_companion
+#: model:res.groups,name:wh40k_companion.group_player
+msgid "Player"
+msgstr ""
+
+#. module: wh40k_companion
+#: model:res.groups,name:wh40k_companion.group_manager
+msgid "Manager"
+msgstr ""
+
+#. module: wh40k_companion
+#: model:ir.actions.act_window,name:wh40k_companion.action_wh40k_match
+msgid "Matches"
+msgstr ""
+
+#. module: wh40k_companion
+#: model:ir.actions.act_window,name:wh40k_companion.action_wh40k_mission
+msgid "Missions"
+msgstr ""
+
+#. module: wh40k_companion
+#: code:addons/wh40k_companion/models/match.py:0
+msgid "Only draft matches can be published."
+msgstr ""
+
+#. module: wh40k_companion
+#: code:addons/wh40k_companion/models/match.py:0
+msgid "Waiting timeout expired. Match was cancelled."
+msgstr ""
+
+#. module: wh40k_companion
+#: code:addons/wh40k_companion/models/match.py:0
+msgid "Victory! Opponent surrendered."
+msgstr ""
+
+#. module: wh40k_companion
+#: code:addons/wh40k_companion/models/match.py:0
+msgid "Defeat. You surrendered."
+msgstr ""

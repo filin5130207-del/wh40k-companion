@@ -2,7 +2,7 @@
 <odoo>
     <template id="landing_page" name="WH40k Companion Landing">
         <t t-set="head">
-            <link rel="stylesheet" type="text/css" href="/wh40k_companion/static/src/css/companion.css"/>
+            <t t-call-assets="wh40k_companion.assets_public"/>
             <style>
                 body { margin: 0; background: #0e1319; }
                 .wh40k-public { max-width: 520px; margin: 4rem auto; padding: 1rem; }
@@ -19,8 +19,8 @@
                     <div t-if="error" class="wh40k-error" t-out="error"/>
                     <div t-if="message" class="wh40k-muted" t-out="message"/>
                     <div class="wh40k-row">
-                        <a class="wh40k-btn wh40k-btn-primary" href="/wh40k/signup">Зарегистрироваться</a>
-                        <a class="wh40k-btn" href="/web/login?redirect=/wh40k/app">Войти</a>
+                        <a class="wh40k-btn wh40k-btn-primary" href="/wh40k/signup">Sign up</a>
+                        <a class="wh40k-btn" href="/web/login?redirect=/wh40k/app">Log in</a>
                     </div>
                 </section>
             </div>
@@ -29,7 +29,7 @@
 
     <template id="signup_page" name="WH40k Companion Signup">
         <t t-set="head">
-            <link rel="stylesheet" type="text/css" href="/wh40k_companion/static/src/css/companion.css"/>
+            <t t-call-assets="wh40k_companion.assets_public"/>
             <style>
                 body { margin: 0; background: #0e1319; }
                 .wh40k-public { max-width: 520px; margin: 3rem auto; padding: 1rem; }
@@ -41,22 +41,22 @@
                     <h1 class="wh40k-brand">WH40k <span>Companion</span></h1>
                 </header>
                 <section class="wh40k-panel">
-                    <h2>Регистрация</h2>
-                    <p class="wh40k-muted">Создайте аккаунт и игровой профиль с уникальным никнеймом.</p>
+                    <h2>Sign up</h2>
+                    <p class="wh40k-muted">Create an account and a unique battle nickname.</p>
                     <div t-if="error" class="wh40k-error" t-out="error"/>
                     <form action="/wh40k/signup" method="post">
                         <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
                         <input type="hidden" name="join" t-att-value="join or ''"/>
                         <label class="wh40k-muted">Email</label>
                         <input class="wh40k-input" type="email" name="email" required="required" t-att-value="email"/>
-                        <label class="wh40k-muted">Пароль</label>
+                        <label class="wh40k-muted">Password</label>
                         <input class="wh40k-input" type="password" name="password" required="required" minlength="8"/>
-                        <label class="wh40k-muted">Никнейм</label>
+                        <label class="wh40k-muted">Nickname</label>
                         <input class="wh40k-input" type="text" name="nickname" required="required" minlength="3" t-att-value="nickname" placeholder="GogoGogo207"/>
-                        <p t-if="join" class="wh40k-muted">После регистрации вы сразу попадёте в приглашение на матч.</p>
+                        <p t-if="join" class="wh40k-muted">After signup you will open the match invite automatically.</p>
                         <div class="wh40k-row">
-                            <button class="wh40k-btn wh40k-btn-primary" type="submit">Создать профиль</button>
-                            <a class="wh40k-btn" href="/wh40k">Назад</a>
+                            <button class="wh40k-btn wh40k-btn-primary" type="submit">Create profile</button>
+                            <a class="wh40k-btn" href="/wh40k">Back</a>
                         </div>
                     </form>
                 </section>
@@ -66,7 +66,7 @@
 
     <template id="join_gate" name="WH40k Companion Join Gate">
         <t t-set="head">
-            <link rel="stylesheet" type="text/css" href="/wh40k_companion/static/src/css/companion.css"/>
+            <t t-call-assets="wh40k_companion.assets_public"/>
             <style>
                 body { margin: 0; background: #0e1319; }
                 .wh40k-public { max-width: 520px; margin: 4rem auto; padding: 1rem; }
@@ -75,11 +75,11 @@
         <t t-call="web.layout" head="head">
             <div class="wh40k-app wh40k-public">
                 <section class="wh40k-panel">
-                    <h2>Приглашение в матч</h2>
-                    <p class="wh40k-muted">Войдите или зарегистрируйтесь — после этого откроется PWA Battle App с приглашением (без копирования ссылки).</p>
+                    <h2>Match invite</h2>
+                    <p class="wh40k-muted">Log in or sign up — then Battle App opens with the invite (no link copy needed).</p>
                     <div class="wh40k-row">
-                        <a class="wh40k-btn wh40k-btn-primary" t-att-href="login_url">Войти и присоединиться</a>
-                        <a class="wh40k-btn wh40k-btn-success" t-att-href="signup_url">Регистрация</a>
+                        <a class="wh40k-btn wh40k-btn-primary" t-att-href="login_url">Log in and join</a>
+                        <a class="wh40k-btn wh40k-btn-success" t-att-href="signup_url">Sign up</a>
                     </div>
                 </section>
             </div>

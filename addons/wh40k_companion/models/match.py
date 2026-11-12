@@ -1,9 +1,12 @@
 import json
+import logging
 import uuid
 from datetime import timedelta
 
 from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
+
+_logger = logging.getLogger(__name__)
 
 
 class Wh40kMatch(models.Model):
@@ -49,9 +52,15 @@ class Wh40kMatch(models.Model):
     )
     winner_id = fields.Many2one("res.partner", string="Winner")
     mission_id = fields.Many2one("wh40k.mission", string="Mission")
+    unit_line_ids = fields.One2many(
+        "wh40k.match.unit.line",
+        "match_id",
+        string="Unit Lines",
+    )
+    # Legacy JSON kept for migration / transport only; live source of truth is unit_line_ids.
     unit_state = fields.Text(
-        string="Unit State JSON",
-        help="Per-unit wound/model tracking for the active match.",
+        string="Unit State JSON (legacy)",
+        help="Deprecated transport cache. Prefer unit_line_ids.",
         default="{}",
     )
     published_at = fields.Datetime()
@@ -59,6 +68,7 @@ class Wh40kMatch(models.Model):
     cancel_reason = fields.Char(string="Cancel Reason")
 
     WAITING_TIMEOUT_MINUTES = 15
+    BUS_CHANNEL_PREFIX = "wh40k.match"
 
     def waiting_expires_at(self):
         self.ensure_one()
@@ -86,6 +96,34 @@ class Wh40kMatch(models.Model):
             vals.setdefault("match_token", str(uuid.uuid4()))
         return super().create(vals_list)
 
+    def write(self, vals):
+        res = super().write(vals)
+        # Notify participants on lifecycle / tracking changes (bus + long-poll wake).
+        watched = {"state", "guest_id", "winner_id", "cancel_reason", "finished_at"}
+        if watched.intersection(vals):
+            self._notify_match_changed()
+        return res
+
+    def _bus_channels_for_partners(self):
+        self.ensure_one()
+        partners = self.host_id | self.guest_id
+        return [f"{self.BUS_CHANNEL_PREFIX}.{partner.id}" for partner in partners if partner]
+
+    def _notify_match_changed(self):
+        """Push a lightweight bus notification to host/guest when available."""
+        Bus = self.env["bus.bus"].sudo()
+        for match in self:
+            payload = {
+                "match_id": match.id,
+                "state": match.state,
+                "write_date": fields.Datetime.to_string(match.write_date),
+            }
+            for channel in match._bus_channels_for_partners():
+                try:
+                    Bus._sendone(channel, "wh40k.match/updated", payload)
+                except Exception:  # noqa: BLE001 — bus must never break match writes
+                    _logger.debug("WH40k bus notify skipped", exc_info=True)
+
     def action_publish(self):
         for match in self:
             if match.state != "draft":
@@ -112,6 +150,7 @@ class Wh40kMatch(models.Model):
 
     def get_join_url(self, base_url=None):
         self.ensure_one()
+        # Config parameter is global; sudo is intentional and read-only.
         icp = self.env["ir.config_parameter"].sudo()
         base = (base_url or icp.get_str("web.base.url") or "").rstrip("/")
         return f"{base}/wh40k/join/{self.match_token}"
@@ -124,24 +163,24 @@ class Wh40kMatch(models.Model):
         )
 
     def action_accept_invite(self, guest_partner):
-        """Guest accepted invite card: waiting → selecting."""
+        """Guest accepted invite card: waiting → selecting (claim guest seat)."""
         self.ensure_one()
         if self.is_waiting_expired():
-            self.action_cancel(reason="Таймаут ожидания противника")
+            self.action_cancel(reason="Waiting timeout expired")
             raise UserError("Waiting timeout expired. Match was cancelled.")
         if self.state != "waiting":
             raise UserError("This match is not waiting for a guest.")
-        if self.guest_id:
+        if self.guest_id and self.guest_id.id != guest_partner.id:
             raise UserError("A guest has already joined this match.")
         if guest_partner.id == self.host_id.id:
             raise UserError("Host cannot join as guest.")
-        self.write({"state": "selecting"})
+        self.write({"state": "selecting", "guest_id": guest_partner.id})
         return True
 
     def action_join(self, guest_partner, guest_roster):
         self.ensure_one()
         if self.is_waiting_expired() and self.state == "waiting":
-            self.action_cancel(reason="Таймаут ожидания противника")
+            self.action_cancel(reason="Waiting timeout expired")
             raise UserError("Waiting timeout expired. Match was cancelled.")
         if self.state not in ("waiting", "selecting"):
             raise UserError("This match is not open for joining.")
@@ -155,57 +194,83 @@ class Wh40kMatch(models.Model):
             raise ValidationError(
                 f"Guest roster points ({guest_roster.points_used}) exceed match limit ({self.points})."
             )
-        unit_state = self._build_initial_unit_state(self.host_roster_id, guest_roster)
         self.write(
             {
                 "guest_id": guest_partner.id,
                 "guest_roster_id": guest_roster.id,
                 "state": "active",
-                "unit_state": json.dumps(unit_state),
             }
         )
+        self._rebuild_unit_lines(self.host_roster_id, guest_roster)
+        self._sync_legacy_unit_state()
+        self._notify_match_changed()
         return True
 
-    def _build_initial_unit_state(self, host_roster, guest_roster):
-        def side_state(roster, side):
-            entries = []
-            for unit in roster.force_ids.mapped("detachment_ids.unit_ids"):
-                wounds = 0
-                models_count = 0
-                for model in unit.model_ids:
-                    qty = model.quantity or 1
-                    models_count += qty
-                    try:
-                        w = int(str(model.wounds or "1").replace("+", "").strip() or "1")
-                    except ValueError:
-                        w = 1
-                    wounds += w * qty
-                entries.append(
-                    {
-                        "unit_id": unit.id,
-                        "side": side,
-                        "name": unit.name,
-                        "models": models_count or unit.quantity or 1,
-                        "models_remaining": models_count or unit.quantity or 1,
-                        "wounds": wounds or 1,
-                        "wounds_remaining": wounds or 1,
-                        "destroyed": False,
-                    }
-                )
-            return entries
+    def _side_line_vals(self, roster, side):
+        vals_list = []
+        # Rosters of the opponent may be outside player ACL; caller must have checked access.
+        roster_rs = roster.sudo() if roster else roster
+        if not roster_rs:
+            return vals_list
+        for unit in roster_rs.force_ids.mapped("detachment_ids.unit_ids"):
+            wounds = 0
+            models_count = 0
+            for model in unit.model_ids:
+                qty = model.quantity or 1
+                models_count += qty
+                try:
+                    w = int(str(model.wounds or "1").replace("+", "").strip() or "1")
+                except ValueError:
+                    w = 1
+                wounds += w * qty
+            vals_list.append(
+                {
+                    "match_id": self.id,
+                    "unit_id": unit.id,
+                    "side": side,
+                    "name": unit.name,
+                    "models": models_count or unit.quantity or 1,
+                    "models_remaining": models_count or unit.quantity or 1,
+                    "wounds": wounds or 1,
+                    "wounds_remaining": wounds or 1,
+                    "destroyed": False,
+                    "undo_stack": "[]",
+                }
+            )
+        return vals_list
 
-        return {
-            "host": side_state(host_roster, "host"),
-            "guest": side_state(guest_roster, "guest"),
-        }
+    def _rebuild_unit_lines(self, host_roster, guest_roster):
+        self.ensure_one()
+        self.unit_line_ids.unlink()
+        vals = self._side_line_vals(host_roster, "host") + self._side_line_vals(
+            guest_roster, "guest"
+        )
+        if vals:
+            self.env["wh40k.match.unit.line"].create(vals)
+
+    def unit_state_dict(self):
+        """DTO still used by the PWA (host/guest lists + undo map)."""
+        self.ensure_one()
+        host = []
+        guest = []
+        undo = {}
+        for line in self.unit_line_ids:
+            entry = line.to_state_entry()
+            if line.side == "host":
+                host.append(entry)
+            else:
+                guest.append(entry)
+            stack = line._undo_list()
+            if stack:
+                undo[str(line.unit_id.id)] = stack
+        return {"host": host, "guest": guest, "undo": undo}
+
+    def _sync_legacy_unit_state(self):
+        for match in self:
+            match.unit_state = json.dumps(match.unit_state_dict())
 
     def action_update_unit_state(self, payload, updating_partner=None):
-        """Persist live unit tracking.
-
-        Players may only change their own side (host/guest unit list + undo
-        stacks for those units). Opponent side is kept from the stored state.
-        ``undo`` is a map of unit_id → list of prior snapshots (last N).
-        """
+        """Persist live unit tracking onto ORM lines (own side only)."""
         self.ensure_one()
         if self.state != "active":
             raise UserError("Unit state can only be updated during an active match.")
@@ -216,61 +281,36 @@ class Wh40kMatch(models.Model):
         if not isinstance(data, dict):
             raise UserError("Invalid unit_state payload.")
 
-        try:
-            existing = json.loads(self.unit_state or "{}")
-        except json.JSONDecodeError:
-            existing = {}
-        if not isinstance(existing, dict):
-            existing = {}
-
-        partner = updating_partner
-        if partner is None:
-            partner = self.env.user.partner_id
+        partner = updating_partner or self.env.user.partner_id
         if partner.id == self.host_id.id:
-            own_key, other_key = "host", "guest"
+            own_key = "host"
         elif self.guest_id and partner.id == self.guest_id.id:
-            own_key, other_key = "guest", "host"
+            own_key = "guest"
         else:
             raise UserError("Only match participants can update unit state.")
 
         own_units = data.get(own_key)
         if not isinstance(own_units, list):
-            own_units = existing.get(own_key) or []
-        other_units = existing.get(other_key) or []
-        if not isinstance(other_units, list):
-            other_units = []
-
-        own_unit_ids = {
-            str(u.get("unit_id"))
-            for u in own_units
-            if isinstance(u, dict) and u.get("unit_id") is not None
-        }
-        other_unit_ids = {
-            str(u.get("unit_id"))
-            for u in other_units
-            if isinstance(u, dict) and u.get("unit_id") is not None
-        }
-
-        existing_undo = existing.get("undo") if isinstance(existing.get("undo"), dict) else {}
+            raise UserError("Missing own-side unit list.")
         incoming_undo = data.get("undo") if isinstance(data.get("undo"), dict) else {}
-        merged_undo = {}
-        # Keep opponent undo stacks untouched.
-        for uid, stack in existing_undo.items():
-            key = str(uid)
-            if key in other_unit_ids:
-                merged_undo[key] = stack
-        # Accept own-side undo stacks from the updater (capped later by clients).
-        for uid, stack in incoming_undo.items():
-            key = str(uid)
-            if key in own_unit_ids and isinstance(stack, list):
-                merged_undo[key] = stack[-20:]
 
-        merged = {
-            "host": own_units if own_key == "host" else other_units,
-            "guest": own_units if own_key == "guest" else other_units,
-            "undo": merged_undo,
-        }
-        self.unit_state = json.dumps(merged)
+        lines = {line.unit_id.id: line for line in self.unit_line_ids if line.side == own_key}
+        for entry in own_units:
+            if not isinstance(entry, dict):
+                continue
+            unit_id = entry.get("unit_id")
+            if unit_id is None:
+                continue
+            line = lines.get(int(unit_id))
+            if not line:
+                continue
+            stack = incoming_undo.get(str(unit_id), incoming_undo.get(unit_id))
+            if not isinstance(stack, list):
+                stack = line._undo_list()
+            line.action_apply_snapshot(entry, undo_stack=stack)
+
+        self._sync_legacy_unit_state()
+        self._notify_match_changed()
         return True
 
     def action_surrender(self, surrendering_partner):
@@ -294,7 +334,7 @@ class Wh40kMatch(models.Model):
                 "finished_at": fields.Datetime.now(),
             }
         )
-        # Stats live on partners; participants may lack write on the opponent.
+        # Players cannot write opponent partner stats; narrow sudo around counters only.
         winner.sudo().action_wh40k_record_result(won=True)
         loser.sudo().action_wh40k_record_result(won=False)
         return True
@@ -313,7 +353,7 @@ class Wh40kMatch(models.Model):
             stale.write(
                 {
                     "state": "cancelled",
-                    "cancel_reason": "Таймаут ожидания противника",
+                    "cancel_reason": "Waiting timeout expired",
                 }
             )
         return True
@@ -394,17 +434,16 @@ class Wh40kMatch(models.Model):
 
     @api.model
     def find_by_token(self, match_token):
-        # Token is the capability: guests are not host/guest yet, so search with sudo
-        # after the controller authenticated a real user. State mutations still run
+        # Token is the capability: guests are not yet in ACL domain, so search with
+        # sudo after the controller authenticated a real user. Mutations still run
         # through action_accept_invite / action_join checks.
         match = self.sudo().search([("match_token", "=", match_token)], limit=1)
         if not match:
             raise UserError("Invalid match token.")
         if match.state == "waiting" and match.is_waiting_expired():
-            match.action_cancel(reason="Таймаут ожидания противника")
+            match.action_cancel(reason="Waiting timeout expired")
             raise UserError("Waiting timeout expired. Match was cancelled.")
         return match
-
 
     def to_verify_dict(self):
         self.ensure_one()
@@ -413,6 +452,8 @@ class Wh40kMatch(models.Model):
         if self.guest_id and self.state == "waiting":
             raise UserError("A guest has already joined this match.")
         host_roster = self.host_roster_id
+        # Host roster summary for invite card — sudo after token capability check.
+        host_roster_sudo = host_roster.sudo() if host_roster else host_roster
         return {
             "match_id": self.id,
             "state": self.state,
@@ -427,7 +468,7 @@ class Wh40kMatch(models.Model):
                 "id": self.host_id.id,
                 "nickname": self.host_id.wh40k_nickname or self.host_id.name,
             },
-            "host_roster": host_roster.to_host_summary_dict() if host_roster else None,
+            "host_roster": host_roster_sudo.to_host_summary_dict() if host_roster_sudo else None,
         }
 
     def eligible_rosters_for(self, partner):
@@ -452,25 +493,28 @@ class Wh40kMatch(models.Model):
 
     def to_state_dict(self, partner, base_url=None):
         self.ensure_one()
-        # Host can always read before guest joins; after join both participants.
         if self.guest_id:
             self._assert_participant(partner)
         elif not self._partner_is_host(partner):
             raise AccessError("Not a participant of this match.")
 
         if self.state == "waiting" and self.is_waiting_expired():
-            self.action_cancel(reason="Таймаут ожидания противника")
+            self.action_cancel(reason="Waiting timeout expired")
 
-        try:
-            unit_state = json.loads(self.unit_state or "{}")
-        except json.JSONDecodeError:
-            unit_state = {}
+        unit_state = self.unit_state_dict()
+        if not unit_state["host"] and not unit_state["guest"] and self.unit_state:
+            # Fallback for rows not yet migrated.
+            try:
+                unit_state = json.loads(self.unit_state or "{}")
+            except json.JSONDecodeError:
+                unit_state = {"host": [], "guest": [], "undo": {}}
+
         expires_at = self.waiting_expires_at()
         return {
             "id": self.id,
             "state": self.state,
             "points": self.points,
-            "match_token": self.match_token,
+            "match_token": self.match_token if self.state == "waiting" else None,
             "join_url": self.get_join_url(base_url=base_url)
             if self.state == "waiting"
             else None,
@@ -478,6 +522,9 @@ class Wh40kMatch(models.Model):
             if self.published_at
             else None,
             "expires_at": fields.Datetime.to_string(expires_at) if expires_at else None,
+            "write_date": fields.Datetime.to_string(self.write_date)
+            if self.write_date
+            else None,
             "cancel_reason": self.cancel_reason or "",
             "mission": {
                 "id": self.mission_id.id,
@@ -519,8 +566,38 @@ class Wh40kMatch(models.Model):
             "you_won": you_won,
             "you_surrendered": not you_won,
             "message": (
-                "Победа! Противник сдался."
+                "Victory! Opponent surrendered."
                 if you_won
-                else "Поражение. Вы сдались."
+                else "Defeat. You surrendered."
             ),
         }
+
+    def _db_write_date_string(self):
+        """Read write_date from SQL so long-poll sees other transactions."""
+        self.ensure_one()
+        self.env.cr.execute(
+            "SELECT write_date FROM wh40k_match WHERE id = %s",
+            (self.id,),
+        )
+        row = self.env.cr.fetchone()
+        if not row or not row[0]:
+            return None
+        return fields.Datetime.to_string(row[0])
+
+    def wait_for_change(self, since_write_date=None, timeout_seconds=20):
+        """Long-poll helper: return once write_date advances or timeout."""
+        self.ensure_one()
+        import time
+
+        timeout_seconds = max(1, min(25, int(timeout_seconds or 20)))
+        since = since_write_date or self._db_write_date_string()
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            current = self._db_write_date_string()
+            if current and since and current != since:
+                self.invalidate_recordset()
+                return True, current
+            time.sleep(0.75)
+        current = self._db_write_date_string()
+        self.invalidate_recordset()
+        return False, current

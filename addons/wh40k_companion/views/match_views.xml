@@ -37,16 +37,32 @@
                         <group>
                             <field name="points"/>
                             <field name="mission_id"/>
-                            <field name="match_token"/>
+                            <field name="match_token" groups="wh40k_companion.group_manager" readonly="1"/>
                             <field name="winner_id"/>
                             <field name="published_at"/>
                             <field name="finished_at"/>
                             <field name="cancel_reason"/>
                         </group>
                     </group>
-                    <group string="Unit State">
-                        <field name="unit_state" nolabel="1" colspan="2"/>
-                    </group>
+                    <notebook>
+                        <page string="Unit Lines">
+                            <field name="unit_line_ids">
+                                <list editable="bottom">
+                                    <field name="side"/>
+                                    <field name="name"/>
+                                    <field name="unit_id"/>
+                                    <field name="models"/>
+                                    <field name="models_remaining"/>
+                                    <field name="wounds"/>
+                                    <field name="wounds_remaining"/>
+                                    <field name="destroyed"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Legacy JSON" groups="wh40k_companion.group_manager">
+                            <field name="unit_state" nolabel="1" colspan="2" readonly="1"/>
+                        </page>
+                    </notebook>
                 </sheet>
                 <chatter/>
             </form>

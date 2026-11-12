@@ -18,7 +18,6 @@ class Wh40kUnit(models.Model):
     keywords = fields.Char()
     model_ids = fields.One2many("wh40k.model", "unit_id", string="Models")
     ability_ids = fields.One2many("wh40k.ability", "unit_id", string="Abilities")
-    # Live game tracking (per match copy kept on match.unit_state JSON;
-    # these fields hold imported defaults / optional overrides)
+    # Imported defaults; live match tracking lives on wh40k.match.unit.line.
     current_models = fields.Integer(string="Models Remaining")
     current_wounds = fields.Integer(string="Wounds Remaining")

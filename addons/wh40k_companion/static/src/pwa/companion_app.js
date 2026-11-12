@@ -1,66 +1,45 @@
 /** @odoo-module **/
 
-import { Component, proxy, signal, onWillStart, onMounted, onWillUnmount } from "@odoo/owl";
+import { Component, signal, onWillStart, onMounted, onWillUnmount } from "@odoo/owl";
 import { rpc } from "@web/core/network/rpc";
-
-const API = "/wh40k/api";
-
-function extractJoinToken() {
-    const hash = window.location.hash || "";
-    const query = window.location.search || "";
-    const path = window.location.pathname || "";
-    const fromHash = hash.match(/wh40k_join=([^&]+)/);
-    if (fromHash) {
-        return decodeURIComponent(fromHash[1]);
-    }
-    const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
-    const fromQuery = params.get("wh40k_join") || params.get("join") || "";
-    if (fromQuery) {
-        return fromQuery;
-    }
-    const fromPath = path.match(/\/wh40k\/join\/([a-f0-9-]+)/i);
-    if (fromPath) {
-        return fromPath[1];
-    }
-    try {
-        return sessionStorage.getItem("wh40k_join") || "";
-    } catch (_e) {
-        return "";
-    }
-}
-
-function rememberJoinToken(token) {
-    if (!token) {
-        return;
-    }
-    try {
-        sessionStorage.setItem("wh40k_join", token);
-    } catch (_e) {
-        // ignore quota / private mode
-    }
-}
-
-function clearRememberedJoinToken() {
-    try {
-        sessionStorage.removeItem("wh40k_join");
-    } catch (_e) {
-        // ignore
-    }
-}
-
-function parseOdooDatetime(value) {
-    if (!value) {
-        return null;
-    }
-    // Odoo JSON datetimes are UTC "YYYY-MM-DD HH:MM:SS"
-    const iso = String(value).includes("T") ? String(value) : `${String(value).replace(" ", "T")}Z`;
-    const ms = Date.parse(iso);
-    return Number.isNaN(ms) ? null : ms;
-}
+import {
+    API,
+    extractJoinToken,
+    rememberJoinToken,
+    clearRememberedJoinToken,
+    parseOdooDatetime,
+    createBattleStore,
+} from "./battle_store";
+import { Wh40kErrorBoundary } from "./error_boundary";
+import {
+    NicknameGate,
+    HomeScreen,
+    RostersScreen,
+    RosterDetailScreen,
+    ImportPreview,
+    CreateMatch,
+    WaitingScreen,
+    JoinScreen,
+    GameScreen,
+    MatchResultScreen,
+} from "./components/screen_host";
 
 export class Wh40kCompanionApp extends Component {
     static template = "wh40k_companion.CompanionApp";
     static props = {};
+    static components = {
+        Wh40kErrorBoundary,
+        NicknameGate,
+        HomeScreen,
+        RostersScreen,
+        RosterDetailScreen,
+        ImportPreview,
+        CreateMatch,
+        WaitingScreen,
+        JoinScreen,
+        GameScreen,
+        MatchResultScreen,
+    };
     rosterFile = signal.ref();
 
     setup() {
@@ -68,70 +47,8 @@ export class Wh40kCompanionApp extends Component {
         if (initialJoinToken) {
             rememberJoinToken(initialJoinToken);
         }
-        this.state = proxy({
-            screen: "home",
-            busy: false,
-            error: "",
-            needsNickname: false,
-            player: {
-                nickname: "",
-                wins: 0,
-                losses: 0,
-                total_match: 0,
-                win_rate: 0,
-            },
-            rosters: [],
-            rosterDetail: null, // full roster from /wh40k/roster/<id>/detail
-            rosterDetailPaneMode: "units", // units | rules
-            missions: [],
-            importPreview: null,
-            create: {
-                points: "2000",
-                mission_id: null,
-                roster_id: null,
-            },
-            waiting: {
-                match_id: null,
-                join_url: "",
-                match_token: "",
-                published_at: null,
-                expires_at: null,
-                remaining_ms: 15 * 60 * 1000,
-            },
-            join: {
-                token: initialJoinToken,
-                step: initialJoinToken ? "loading" : "token", // loading | token | invite | selecting
-                verified: false,
-                host_nickname: "",
-                host_roster_name: "",
-                host_roster_faction: "",
-                host_roster_points: "",
-                points: "",
-                mission_name: "",
-                rosters: [],
-                roster_id: null,
-            },
-            match: null,
-            activeMatch: null, // dashboard summary when an active match exists
-            unitState: { host: [], guest: [], undo: {} },
-            rules: [],
-            ownRules: [],
-            oppRules: [],
-            ownPaneMode: "units", // units | rules
-            oppPaneMode: "units",
-            gameSide: "own", // own | opponent — only one side visible
-            datasheet: null,
-            showSurrenderModal: false,
-            result: {
-                winner_nickname: "",
-                you_won: false,
-                you_surrendered: false,
-                message: "",
-                show_on_home: false,
-            },
-            pendingRosterJson: null,
-        });
-        this._poll = null;
+        this.state = createBattleStore(initialJoinToken);
+        this._watchLoop = false;
         this._countdown = null;
         this._finishingMatch = false;
         this._waitingTimeoutHandled = false;
@@ -149,19 +66,23 @@ export class Wh40kCompanionApp extends Component {
         });
 
         onMounted(() => {
-            // Waiting room + active game both poll through the same ticker.
-            this._poll = setInterval(() => this.pollMatchLifecycle(), 5000);
+            this._watchLoop = true;
+            this.runWatchLoop();
             this._countdown = setInterval(() => this.tickCountdown(), 1000);
         });
 
         onWillUnmount(() => {
-            if (this._poll) {
-                clearInterval(this._poll);
-            }
+            this._watchLoop = false;
             if (this._countdown) {
                 clearInterval(this._countdown);
             }
         });
+    }
+
+    recoverFromRenderError() {
+        this.state.renderError = "";
+        this.state.error = "";
+        this.setScreen("home");
     }
 
     get eligibleHostRosters() {
@@ -562,6 +483,7 @@ export class Wh40kCompanionApp extends Component {
                 published_at: published.published_at,
                 expires_at: published.expires_at,
                 remaining_ms: (published.waiting_seconds || 900) * 1000,
+                write_date: published.write_date || null,
             };
             this._waitingTimeoutHandled = false;
             this.tickCountdown();
@@ -580,6 +502,7 @@ export class Wh40kCompanionApp extends Component {
             published_at: null,
             expires_at: null,
             remaining_ms: 15 * 60 * 1000,
+            write_date: null,
         };
     }
 
@@ -597,7 +520,7 @@ export class Wh40kCompanionApp extends Component {
             if (matchId) {
                 await this.rpc(`${API}/match/cancel`, {
                     match_id: matchId,
-                    reason: "Таймаут ожидания противника",
+                    reason: "Waiting timeout expired",
                 });
             }
         } catch (_e) {
@@ -611,7 +534,7 @@ export class Wh40kCompanionApp extends Component {
         }
         this.setScreen("home");
         this.state.error =
-            message || "Время ожидания истекло. Матч отменён.";
+            message || "Waiting time expired. Match cancelled.";
         this.state.busy = false;
     }
 
@@ -628,90 +551,122 @@ export class Wh40kCompanionApp extends Component {
         if (this.state.waiting.remaining_ms <= 0 && this.state.waiting.match_id) {
             // Do not leave the host stuck on the waiting/QR screen.
             this.leaveWaitingAfterTimeout(
-                "Время ожидания истекло. Матч отменён."
+                "Waiting time expired. Match cancelled."
             );
+        }
+    }
+
+    async runWatchLoop() {
+        while (this._watchLoop) {
+            try {
+                await this.pollMatchLifecycle();
+            } catch (_e) {
+                // keep loop alive
+            }
+            // When not watching a match, idle briefly.
+            if (
+                !(
+                    (this.state.screen === "waiting" && this.state.waiting.match_id) ||
+                    (this.state.screen === "game" && this.state.match && this.state.match.id)
+                )
+            ) {
+                await new Promise((r) => setTimeout(r, 1500));
+            }
         }
     }
 
     async pollMatchLifecycle() {
         if (this.state.screen === "waiting" && this.state.waiting.match_id) {
-            await this.pollWaiting();
+            await this.watchMatch(
+                this.state.waiting.match_id,
+                this.state.waiting.write_date,
+                (match) => this.applyWaitingWatch(match)
+            );
             return;
         }
         if (this.state.screen === "game" && this.state.match && this.state.match.id) {
-            await this.pollActiveMatch();
+            await this.watchMatch(
+                this.state.match.id,
+                this.state.match.write_date,
+                (match) => this.applyActiveWatch(match)
+            );
         }
     }
 
-    async pollWaiting() {
-        if (this.state.screen !== "waiting" || !this.state.waiting.match_id) {
-            return;
-        }
+    async watchMatch(matchId, since, onPayload) {
         try {
-            const data = await this.rpc(`${API}/match/state`, {
-                match_id: this.state.waiting.match_id,
+            const data = await this.rpc(`${API}/match/watch`, {
+                match_id: matchId,
+                since: since || null,
+                timeout: 20,
             });
-            if (data.match.expires_at) {
-                this.state.waiting.expires_at = data.match.expires_at;
-            }
-            if (data.match.state === "active") {
-                await this.enterGame(data.match.id);
-            } else if (data.match.state === "cancelled") {
-                const reason = data.match.cancel_reason || "Матч отменён.";
-                const isTimeout = reason.includes("Таймаут");
-                if (isTimeout) {
-                    await this.leaveWaitingAfterTimeout(
-                        "Время ожидания истекло. Матч отменён."
-                    );
-                } else {
-                    this.clearWaitingState();
-                    this.setScreen("home");
-                    this.state.error = reason;
-                    try {
-                        await this.loadDashboard();
-                    } catch (_e) {
-                        // ignore
-                    }
+            if (data.write_date) {
+                if (this.state.screen === "waiting" && this.state.waiting.match_id === matchId) {
+                    this.state.waiting.write_date = data.write_date;
                 }
-            } else if (
-                data.match.state === "waiting" &&
-                this.state.waiting.remaining_ms <= 0
-            ) {
-                await this.leaveWaitingAfterTimeout(
-                    "Время ожидания истекло. Матч отменён."
-                );
+                if (this.state.match && this.state.match.id === matchId) {
+                    this.state.match.write_date = data.write_date;
+                }
             }
-        } catch (e) {
-            // keep polling
-        }
-    }
-
-    async pollActiveMatch() {
-        if (this._finishingMatch || !this.state.match || !this.state.match.id) {
-            return;
-        }
-        try {
-            const data = await this.rpc(`${API}/match/state`, {
-                match_id: this.state.match.id,
-            });
-            const match = data.match || {};
-            if (match.state === "finished") {
-                await this.goHomeAfterMatchEnd({
-                    winner_id: match.winner_id,
-                    winner_nickname: match.winner_nickname || "",
-                    host: match.host,
-                    guest: match.guest,
-                    is_host: !!match.is_host,
-                    you_surrendered: false,
-                });
-            } else if (match.state === "cancelled") {
-                this.state.activeMatch = null;
-                this.state.match = null;
-                this.setError(match.cancel_reason || "Матч отменён.");
-                this.setScreen("home");
+            if (data.match) {
+                await onPayload(data.match);
             }
         } catch (_e) {
-            // keep polling
+            await new Promise((r) => setTimeout(r, 2000));
+        }
+    }
+
+    async applyWaitingWatch(match) {
+        if (match.expires_at) {
+            this.state.waiting.expires_at = match.expires_at;
+        }
+        if (match.state === "active") {
+            await this.enterGame(match.id);
+        } else if (match.state === "cancelled") {
+            const reason = match.cancel_reason || "Match cancelled.";
+            const isTimeout = /timeout|таймаут/i.test(reason);
+            if (isTimeout) {
+                await this.leaveWaitingAfterTimeout("Waiting time expired. Match cancelled.");
+            } else {
+                this.clearWaitingState();
+                this.setScreen("home");
+                this.state.error = reason;
+                try {
+                    await this.loadDashboard();
+                } catch (_e) {
+                    // ignore
+                }
+            }
+        } else if (match.state === "waiting" && this.state.waiting.remaining_ms <= 0) {
+            await this.leaveWaitingAfterTimeout("Waiting time expired. Match cancelled.");
+        }
+    }
+
+    async applyActiveWatch(match) {
+        if (this._finishingMatch) {
+            return;
+        }
+        if (match.unit_state) {
+            this.state.unitState = {
+                host: match.unit_state.host || [],
+                guest: match.unit_state.guest || [],
+                undo: match.unit_state.undo || {},
+            };
+        }
+        if (match.state === "finished") {
+            await this.goHomeAfterMatchEnd({
+                winner_id: match.winner_id,
+                winner_nickname: match.winner_nickname || "",
+                host: match.host,
+                guest: match.guest,
+                is_host: !!match.is_host,
+                you_surrendered: false,
+            });
+        } else if (match.state === "cancelled") {
+            this.state.activeMatch = null;
+            this.state.match = null;
+            this.setError(match.cancel_reason || "Match cancelled.");
+            this.setScreen("home");
         }
     }
 

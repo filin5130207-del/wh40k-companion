@@ -18,5 +18,5 @@
 
     <menuitem id="menu_wh40k_missions" name="Missions" parent="menu_wh40k_root"
               action="action_wh40k_mission" sequence="30"
-              groups="wh40k_companion.group_player"/>
+              groups="wh40k_companion.group_manager"/>
 </odoo>

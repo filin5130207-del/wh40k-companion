@@ -201,9 +201,10 @@ class Wh40kRoster(models.Model):
         }
 
     @api.model
-    def _force_commands_from_parsed(self, parsed):
+    def _force_commands_from_parsed(self, parsed, owner_partner=None):
         """Build One2many create commands for forces from BattlescribeParser.parse()."""
         Rule = self.env["wh40k.rule"]
+        owner_id = owner_partner.id if owner_partner else self.env.user.partner_id.id
         force_cmds = []
         for force in parsed.get("forces") or []:
             army_rule_ids = []
@@ -213,6 +214,7 @@ class Wh40kRoster(models.Model):
                         "name": rule["name"],
                         "description": rule.get("description"),
                         "external_id": rule.get("external_id"),
+                        "owner_partner_id": owner_id,
                     }
                 )
                 army_rule_ids.append(rec.id)
@@ -226,6 +228,7 @@ class Wh40kRoster(models.Model):
                             "name": rule["name"],
                             "description": rule.get("description"),
                             "external_id": rule.get("external_id"),
+                            "owner_partner_id": owner_id,
                         }
                     )
                     det_rule_ids.append(rec.id)
@@ -348,7 +351,7 @@ class Wh40kRoster(models.Model):
             raise UserError("Missing partner for roster import.")
         if not parsed or not parsed.get("name"):
             raise UserError("Invalid parsed roster payload.")
-        force_cmds = self._force_commands_from_parsed(parsed)
+        force_cmds = self._force_commands_from_parsed(parsed, owner_partner=partner)
         return self.create(
             {
                 "name": parsed["name"],

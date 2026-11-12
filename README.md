@@ -7,7 +7,7 @@ Odoo **20** module `wh40k_companion`: import NewRecruit/Battlescribe JSON roster
 - Odoo 20 + PostgreSQL via Docker Compose
 - Standalone Battle App PWA at `/wh40k/app` + thin `@http.route` JSON API under `/wh40k/api/`
 - **ODPM** (`odpm.json`) for the Odoo package/module workflow
-- No Odoo Bus / no offline mode
+- Match updates via `/wh40k/api/match/watch` long-poll + `bus.bus` notify (standalone PWA; offline S7 still out of scope)
 
 ## Quick start (Docker Compose)
 

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<odoo noupdate="1">
+<odoo>
     <record id="mission_purge_the_foe" model="wh40k.mission">
         <field name="name">Purge the Foe</field>
         <field name="sequence">10</field>

@@ -104,34 +104,9 @@ class Wh40kCompanionController(http.Controller):
             password = post.get("password") or ""
             nickname = (post.get("nickname") or "").strip()
             try:
-                if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
-                    raise UserError("Enter a valid email address.")
-                if len(password) < 8:
-                    raise UserError("Password must be at least 8 characters.")
-                if not nickname or len(nickname) < 3:
-                    raise UserError("Nickname must be at least 3 characters.")
-                Users = request.env["res.users"].sudo()
-                if Users.search([("login", "=", email)], limit=1):
-                    raise UserError("An account with this email already exists.")
-                Partner = request.env["res.partner"].sudo()
-                if Partner.search([("wh40k_nickname", "=", nickname)], limit=1):
-                    raise UserError("This nickname is already taken.")
-                group_player = request.env.ref("wh40k_companion.group_player")
-                action = request.env.ref(
-                    "wh40k_companion.action_wh40k_companion_app",
-                    raise_if_not_found=False,
+                request.env["res.users"].action_wh40k_signup(
+                    email=email, password=password, nickname=nickname
                 )
-                user = Users.with_context(no_reset_password=True).create(
-                    {
-                        "name": nickname,
-                        "login": email,
-                        "email": email,
-                        "password": password,
-                        "group_ids": [(6, 0, [group_player.id])],
-                        "action_id": action.id if action else False,
-                    }
-                )
-                user.partner_id.sudo().write({"wh40k_nickname": nickname})
                 credential = {
                     "login": email,
                     "password": password,
@@ -144,9 +119,9 @@ class Wh40kCompanionController(http.Controller):
                 return request.redirect("/wh40k/app")
             except (UserError, ValidationError) as exc:
                 error = str(exc)
-            except Exception as exc:  # noqa: BLE001 — show signup failure to user
+            except Exception:  # noqa: BLE001 — never leak internals on public form
                 _logger.exception("WH40k signup failed")
-                error = str(exc)
+                error = "Could not create the account. Please try again."
         return request.render(
             "wh40k_companion.signup_page",
             {
@@ -382,9 +357,24 @@ class Wh40kCompanionController(http.Controller):
             return self._ok(
                 state=match.state, cancel_reason=match.cancel_reason or ""
             )
-        cancel_reason = (reason or "").strip() or "Отменено хостом"
+        cancel_reason = (reason or "").strip() or "Cancelled by host"
         match.action_cancel(reason=cancel_reason)
         return self._ok(state=match.state, cancel_reason=match.cancel_reason or "")
+
+    def _api_match_watch(self, match_id=None, since=None, timeout=20, **kwargs):
+        """Long-poll match changes (server-driven updates without blind 5s spam)."""
+        partner = self._partner()
+        match = request.env["wh40k.match"].browse(int(match_id))
+        if not match.exists():
+            raise UserError("Match not found.")
+        changed, write_date = match.wait_for_change(
+            since_write_date=since, timeout_seconds=timeout
+        )
+        return self._ok(
+            changed=bool(changed),
+            write_date=write_date,
+            match=match.to_state_dict(partner, base_url=self._public_base_url()),
+        )
 
     def _api_roster_detail(self, roster_id, **kwargs):
         partner = self._partner()
@@ -485,6 +475,16 @@ class Wh40kCompanionController(http.Controller):
             self._api_match_cancel, match_id=match_id, reason=reason, **kwargs
         )
 
+    @http.route("/wh40k/api/match/watch", type="jsonrpc", auth="user")
+    def api_match_watch(self, match_id=None, since=None, timeout=20, **kwargs):
+        return self._wrap(
+            self._api_match_watch,
+            match_id=match_id,
+            since=since,
+            timeout=timeout,
+            **kwargs,
+        )
+
     @http.route(
         "/wh40k/api/roster/<int:roster_id>/detail", type="jsonrpc", auth="user"
     )
@@ -562,13 +562,19 @@ class Wh40kCompanionController(http.Controller):
     def match_cancel(self, match_id=None, reason=None, **kwargs):
         return self.api_match_cancel(match_id=match_id, reason=reason, **kwargs)
 
+    @http.route("/wh40k/match/watch", type="jsonrpc", auth="user")
+    def match_watch(self, match_id=None, since=None, timeout=20, **kwargs):
+        return self.api_match_watch(
+            match_id=match_id, since=since, timeout=timeout, **kwargs
+        )
+
     @http.route("/wh40k/roster/<int:roster_id>/detail", type="jsonrpc", auth="user")
     def roster_detail(self, roster_id, **kwargs):
         return self.api_roster_detail(roster_id, **kwargs)
 
     # ------------------------------------------------------------------- misc
     @http.route(
-        "/wh40k/qr.png",
+        ["/wh40k/qr.png", "/wh40k/qr.svg"],
         type="http",
         auth="public",
         methods=["GET"],
@@ -577,33 +583,25 @@ class Wh40kCompanionController(http.Controller):
         sitemap=False,
     )
     def qr_png(self, data="", size="260", **kwargs):
-        """Same-origin QR image so waiting UI does not depend on browser egress to QR CDNs."""
-        import urllib.parse
-        import urllib.request
+        """Local QR for join URLs only (no public open-proxy to QR CDNs)."""
+        from ..utils.qr_png import render_join_qr_png
 
-        payload = (data or "").strip()
-        if not payload or len(payload) > 2048:
-            return request.not_found()
         try:
             size_i = max(80, min(512, int(size or 260)))
         except (TypeError, ValueError):
             size_i = 260
-        upstream = (
-            "https://api.qrserver.com/v1/create-qr-code/"
-            f"?size={size_i}x{size_i}&margin=1&data={urllib.parse.quote(payload)}"
-        )
         try:
-            with urllib.request.urlopen(upstream, timeout=10) as resp:
-                content = resp.read()
-                ctype = resp.headers.get("Content-Type", "image/png")
+            content = render_join_qr_png(data, size=size_i)
+        except ValueError:
+            return request.not_found()
         except Exception:
-            _logger.exception("QR proxy fetch failed")
+            _logger.exception("Local QR render failed")
             return request.not_found()
         return request.make_response(
             content,
             headers=[
-                ("Content-Type", ctype),
-                ("Cache-Control", "public, max-age=60"),
+                ("Content-Type", "image/png"),
+                ("Cache-Control", "public, max-age=120"),
             ],
         )
 

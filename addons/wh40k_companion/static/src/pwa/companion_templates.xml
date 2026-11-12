@@ -5,58 +5,60 @@
     <div class="wh40k-app o_wh40k_companion" t-att-class="{'wh40k-app-with-nav': this.showBottomNav}">
         <div t-if="this.state.error" class="wh40k-error" t-out="this.state.error"/>
 
-        <t t-if="this.state.screen === 'nickname'">
-            <t t-call="wh40k_companion.NicknameGate"/>
-        </t>
-        <t t-elif="this.state.screen === 'home' || this.state.screen === 'dashboard'">
-            <t t-call="wh40k_companion.HomeScreen"/>
-        </t>
-        <t t-elif="this.state.screen === 'rosters'">
-            <t t-call="wh40k_companion.RostersScreen"/>
-        </t>
-        <t t-elif="this.state.screen === 'roster_detail'">
-            <t t-call="wh40k_companion.RosterDetailScreen"/>
-        </t>
-        <t t-elif="this.state.screen === 'import_preview'">
-            <t t-call="wh40k_companion.ImportPreview"/>
-        </t>
-        <t t-elif="this.state.screen === 'create_match'">
-            <t t-call="wh40k_companion.CreateMatch"/>
-        </t>
-        <t t-elif="this.state.screen === 'waiting'">
-            <t t-call="wh40k_companion.WaitingScreen"/>
-        </t>
-        <t t-elif="this.state.screen === 'join'">
-            <t t-call="wh40k_companion.JoinScreen"/>
-        </t>
-        <t t-elif="this.state.screen === 'game'">
-            <t t-call="wh40k_companion.GameScreen"/>
-        </t>
-        <t t-elif="this.state.screen === 'result'">
-            <t t-call="wh40k_companion.MatchResultScreen"/>
-        </t>
+        <Wh40kErrorBoundary onRecover.bind="recoverFromRenderError">
+            <t t-if="this.state.screen === 'nickname'">
+                <NicknameGate app="this"/>
+            </t>
+            <t t-elif="this.state.screen === 'home' || this.state.screen === 'dashboard'">
+                <HomeScreen app="this"/>
+            </t>
+            <t t-elif="this.state.screen === 'rosters'">
+                <RostersScreen app="this"/>
+            </t>
+            <t t-elif="this.state.screen === 'roster_detail'">
+                <RosterDetailScreen app="this"/>
+            </t>
+            <t t-elif="this.state.screen === 'import_preview'">
+                <ImportPreview app="this"/>
+            </t>
+            <t t-elif="this.state.screen === 'create_match'">
+                <CreateMatch app="this"/>
+            </t>
+            <t t-elif="this.state.screen === 'waiting'">
+                <WaitingScreen app="this"/>
+            </t>
+            <t t-elif="this.state.screen === 'join'">
+                <JoinScreen app="this"/>
+            </t>
+            <t t-elif="this.state.screen === 'game'">
+                <GameScreen app="this"/>
+            </t>
+            <t t-elif="this.state.screen === 'result'">
+                <MatchResultScreen app="this"/>
+            </t>
+        </Wh40kErrorBoundary>
 
-        <nav t-if="this.showBottomNav" class="wh40k-bottom-nav" aria-label="Основная навигация">
+        <nav t-if="this.showBottomNav" class="wh40k-bottom-nav" aria-label="Main navigation">
             <button type="button" class="wh40k-nav-circle"
                     t-att-class="{'active': this.state.screen === 'rosters' || this.state.screen === 'roster_detail' || this.state.screen === 'import_preview'}"
                     t-on-click="() => this.setScreen('rosters')"
-                    aria-label="Мои ростеры" title="Мои ростеры">
+                    aria-label="My rosters" title="My rosters">
                 <span class="wh40k-nav-glyph" aria-hidden="true">R</span>
-                <span class="wh40k-nav-label">Ростеры</span>
+                <span class="wh40k-nav-label">Rosters</span>
             </button>
             <button type="button" class="wh40k-nav-circle wh40k-nav-create"
                     t-att-class="{'active': this.state.screen === 'create_match'}"
                     t-on-click="() => this.setScreen('create_match')"
-                    aria-label="Создать матч" title="Создать матч">
+                    aria-label="Create match" title="Create match">
                 <span class="wh40k-nav-glyph wh40k-nav-plus" aria-hidden="true">+</span>
-                <span class="wh40k-nav-label">Матч</span>
+                <span class="wh40k-nav-label">Match</span>
             </button>
             <button type="button" class="wh40k-nav-circle wh40k-nav-home"
                     t-att-class="{'active': this.state.screen === 'home' || this.state.screen === 'dashboard'}"
                     t-on-click="() => this.setScreen('home')"
-                    aria-label="Главная" title="Главная">
+                    aria-label="Home" title="Home">
                 <span class="wh40k-nav-glyph" aria-hidden="true">⌂</span>
-                <span class="wh40k-nav-label">Главная</span>
+                <span class="wh40k-nav-label">Home</span>
             </button>
         </nav>
     </div>
