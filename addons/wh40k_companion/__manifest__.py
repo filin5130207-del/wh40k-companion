@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.13.0",
+    "version": "20.0.1.14.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -8,6 +8,8 @@ WH40k Battle Companion
 ======================
 Import NewRecruit/Battlescribe JSON rosters, manage player profiles,
 create matches with QR join codes, and track wounds during games.
+
+Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 """,
     "author": "WH40k Companion",
     "license": "LGPL-3",
@@ -24,18 +26,22 @@ create matches with QR join codes, and track wounds during games.
         "views/companion_action.xml",
         "views/menus.xml",
         "views/signup_templates.xml",
+        "views/pwa_templates.xml",
     ],
     "assets": {
+        # Backend: only light polyfills; Battle App no longer mounts here.
         "web.assets_backend": [
-            "wh40k_companion/static/src/css/companion.css",
-            # Early module: polyfill navigator.clipboard
-            # before web_tour.interactive evaluates tour_helpers_clipboard.
             "wh40k_companion/static/src/js/clipboard_polyfill.js",
-            # Load before companion_app so TourPlugin.resumeTour is patched
-            # before Battle App / QR join bootstraps.
             "wh40k_companion/static/src/js/tour_resume_guard.js",
-            "wh40k_companion/static/src/js/companion_app.js",
-            "wh40k_companion/static/src/xml/companion_templates.xml",
+        ],
+        # Standalone PWA (Odoo howto: standalone Owl application).
+        "wh40k_companion.assets_pwa": [
+            ("include", "web._assets_helpers"),
+            "web/static/src/scss/pre_variables.scss",
+            "web/static/lib/bootstrap/scss/_variables.scss",
+            ("include", "web._assets_bootstrap"),
+            ("include", "web._assets_core"),
+            "wh40k_companion/static/src/pwa/**/*",
         ],
     },
     "post_init_hook": "post_init_hook",

@@ -1,4 +1,4 @@
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class Wh40kMission(models.Model):
@@ -11,3 +11,16 @@ class Wh40kMission(models.Model):
     description = fields.Text()
     deployment = fields.Char()
     active = fields.Boolean(default=True)
+
+    def to_dict(self):
+        self.ensure_one()
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description or "",
+            "deployment": self.deployment or "",
+        }
+
+    @api.model
+    def list_active_dicts(self):
+        return [m.to_dict() for m in self.search([("active", "=", True)])]

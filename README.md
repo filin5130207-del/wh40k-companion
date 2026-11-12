@@ -5,7 +5,7 @@ Odoo **20** module `wh40k_companion`: import NewRecruit/Battlescribe JSON roster
 ## Stack
 
 - Odoo 20 + PostgreSQL via Docker Compose
-- Custom OWL frontend + `@http.route` JSON API
+- Standalone Battle App PWA at `/wh40k/app` + thin `@http.route` JSON API under `/wh40k/api/`
 - **ODPM** (`odpm.json`) for the Odoo package/module workflow
 - No Odoo Bus / no offline mode
 
@@ -62,9 +62,9 @@ Sample NewRecruit export:
 
 `addons/wh40k_companion/testdata/aufychi.json`
 
-1. Open **WH40k Companion → Battle App**
+1. Open **http://\<host\>:8069/wh40k/app** (or **WH40k Companion → Battle App**, which opens the PWA URL)
 2. On the dashboard, choose the JSON file and click **Import JSON**
-3. Or call `POST /wh40k/roster/import` (JSON-RPC, auth user) with `roster_json`
+3. Or call `POST /wh40k/api/roster/import` (JSON-RPC, auth user) with `roster_json`
 
 Parser smoke test (no Odoo required):
 
@@ -83,6 +83,7 @@ python3 scripts/smoke_parse_aufychi.py
 | 4–5 | Match create/publish/verify/join + QR waiting screen |
 | 6–7 | GameScreen, datasheet modal, `unit_state`, surrender + result |
 | 8–9 | Cron cancel waiting >15m, dark mobile CSS, README + smoke test |
+| 10 | Battle App as standalone PWA (`/wh40k/app`) + `/wh40k/api/*`; logic in models |
 
 ## Module layout
 
@@ -90,7 +91,10 @@ python3 scripts/smoke_parse_aufychi.py
 addons/wh40k_companion/
   models/ controllers/ views/ security/ data/
   parsers/battlescribe_parser.py
-  static/src/{js,xml,css}
+  static/src/pwa/          # standalone OWL PWA (not backend client action)
+  static/src/css/          # shared public-page CSS
   testdata/aufychi.json
   tests/
 ```
+
+PWA notes: [docs in project store] see `docs/battle-app-pwa.md` on the agent Context, and open `/wh40k/app` after `odpm -d wh40k -u wh40k_companion`.

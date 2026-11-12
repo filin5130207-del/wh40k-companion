@@ -3,7 +3,7 @@ import uuid
 from datetime import timedelta
 
 from odoo import api, fields, models
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 
 class Wh40kMatch(models.Model):
@@ -317,3 +317,210 @@ class Wh40kMatch(models.Model):
                 }
             )
         return True
+
+    # ---------------------------------------------------------------- API helpers
+    def _assert_participant(self, partner):
+        self.ensure_one()
+        guest_id = self.guest_id.id if self.guest_id else 0
+        if partner.id not in (self.host_id.id, guest_id):
+            raise AccessError("Not a participant of this match.")
+        return True
+
+    def _partner_is_host(self, partner):
+        self.ensure_one()
+        return bool(partner and self.host_id.id == partner.id)
+
+    @api.model
+    def get_active_summary_for_partner(self, partner):
+        """Lightweight in-progress match card for dashboard / resume."""
+        match = self.search(
+            [
+                ("state", "=", "active"),
+                "|",
+                ("host_id", "=", partner.id),
+                ("guest_id", "=", partner.id),
+            ],
+            limit=1,
+            order="write_date desc, id desc",
+        )
+        if not match:
+            return None
+        is_host = match.host_id.id == partner.id
+        opponent = match.guest_id if is_host else match.host_id
+        return {
+            "id": match.id,
+            "state": match.state,
+            "points": match.points,
+            "mission_name": match.mission_id.name if match.mission_id else "",
+            "opponent_nickname": (
+                (opponent.wh40k_nickname or opponent.name) if opponent else ""
+            ),
+            "is_host": is_host,
+        }
+
+    @api.model
+    def action_create_for_host(self, partner, roster, mission, points):
+        points = str(points)
+        if points not in ("1000", "2000"):
+            raise UserError("Points must be 1000 or 2000.")
+        if not roster or not roster.exists() or roster.partner_id.id != partner.id:
+            raise UserError("Invalid host roster.")
+        if mission and not mission.exists():
+            raise UserError("Invalid mission.")
+        return self.create(
+            {
+                "host_id": partner.id,
+                "host_roster_id": roster.id,
+                "mission_id": mission.id if mission else False,
+                "points": points,
+                "state": "draft",
+            }
+        )
+
+    def to_publish_dict(self, base_url=None):
+        self.ensure_one()
+        expires_at = self.waiting_expires_at()
+        return {
+            "match_id": self.id,
+            "state": self.state,
+            "match_token": self.match_token,
+            "join_url": self.get_join_url(base_url=base_url),
+            "published_at": fields.Datetime.to_string(self.published_at)
+            if self.published_at
+            else None,
+            "expires_at": fields.Datetime.to_string(expires_at) if expires_at else None,
+            "waiting_seconds": self.WAITING_TIMEOUT_MINUTES * 60,
+        }
+
+    @api.model
+    def find_by_token(self, match_token):
+        # Token is the capability: guests are not host/guest yet, so search with sudo
+        # after the controller authenticated a real user. State mutations still run
+        # through action_accept_invite / action_join checks.
+        match = self.sudo().search([("match_token", "=", match_token)], limit=1)
+        if not match:
+            raise UserError("Invalid match token.")
+        if match.state == "waiting" and match.is_waiting_expired():
+            match.action_cancel(reason="Таймаут ожидания противника")
+            raise UserError("Waiting timeout expired. Match was cancelled.")
+        return match
+
+
+    def to_verify_dict(self):
+        self.ensure_one()
+        if self.state not in ("waiting", "selecting"):
+            raise UserError(f"Match is not joinable (state={self.state}).")
+        if self.guest_id and self.state == "waiting":
+            raise UserError("A guest has already joined this match.")
+        host_roster = self.host_roster_id
+        return {
+            "match_id": self.id,
+            "state": self.state,
+            "points": self.points,
+            "mission": {
+                "id": self.mission_id.id,
+                "name": self.mission_id.name,
+            }
+            if self.mission_id
+            else None,
+            "host": {
+                "id": self.host_id.id,
+                "nickname": self.host_id.wh40k_nickname or self.host_id.name,
+            },
+            "host_roster": host_roster.to_host_summary_dict() if host_roster else None,
+        }
+
+    def eligible_rosters_for(self, partner):
+        self.ensure_one()
+        limit = int(self.points)
+        return self.env["wh40k.roster"].search(
+            [
+                ("partner_id", "=", partner.id),
+                ("points_used", "<=", limit),
+            ]
+        )
+
+    def to_eligible_rosters_dict(self, partner):
+        self.ensure_one()
+        rosters = self.eligible_rosters_for(partner)
+        return {
+            "match_id": self.id,
+            "state": self.state,
+            "points": self.points,
+            "rosters": [r.to_eligible_dict() for r in rosters],
+        }
+
+    def to_state_dict(self, partner, base_url=None):
+        self.ensure_one()
+        # Host can always read before guest joins; after join both participants.
+        if self.guest_id:
+            self._assert_participant(partner)
+        elif not self._partner_is_host(partner):
+            raise AccessError("Not a participant of this match.")
+
+        if self.state == "waiting" and self.is_waiting_expired():
+            self.action_cancel(reason="Таймаут ожидания противника")
+
+        try:
+            unit_state = json.loads(self.unit_state or "{}")
+        except json.JSONDecodeError:
+            unit_state = {}
+        expires_at = self.waiting_expires_at()
+        return {
+            "id": self.id,
+            "state": self.state,
+            "points": self.points,
+            "match_token": self.match_token,
+            "join_url": self.get_join_url(base_url=base_url)
+            if self.state == "waiting"
+            else None,
+            "published_at": fields.Datetime.to_string(self.published_at)
+            if self.published_at
+            else None,
+            "expires_at": fields.Datetime.to_string(expires_at) if expires_at else None,
+            "cancel_reason": self.cancel_reason or "",
+            "mission": {
+                "id": self.mission_id.id,
+                "name": self.mission_id.name,
+                "description": self.mission_id.description or "",
+            }
+            if self.mission_id
+            else None,
+            "host": {
+                "id": self.host_id.id,
+                "nickname": self.host_id.wh40k_nickname or self.host_id.name,
+            },
+            "guest": {
+                "id": self.guest_id.id,
+                "nickname": self.guest_id.wh40k_nickname or self.guest_id.name,
+            }
+            if self.guest_id
+            else None,
+            "host_roster_id": self.host_roster_id.id,
+            "guest_roster_id": self.guest_roster_id.id,
+            "winner_id": self.winner_id.id if self.winner_id else None,
+            "winner_nickname": (
+                (self.winner_id.wh40k_nickname or self.winner_id.name)
+                if self.winner_id
+                else ""
+            ),
+            "unit_state": unit_state,
+            "is_host": self.host_id.id == partner.id,
+        }
+
+    def to_surrender_result_dict(self, partner):
+        self.ensure_one()
+        winner = self.winner_id
+        you_won = bool(winner and winner.id == partner.id)
+        return {
+            "state": self.state,
+            "winner_id": winner.id if winner else None,
+            "winner_nickname": (winner.wh40k_nickname or winner.name) if winner else "",
+            "you_won": you_won,
+            "you_surrendered": not you_won,
+            "message": (
+                "Победа! Противник сдался."
+                if you_won
+                else "Поражение. Вы сдались."
+            ),
+        }

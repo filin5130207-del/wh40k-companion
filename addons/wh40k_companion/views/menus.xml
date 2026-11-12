@@ -5,7 +5,7 @@
               groups="wh40k_companion.group_player"/>
 
     <menuitem id="menu_wh40k_companion_app" name="Battle App" parent="menu_wh40k_root"
-              action="action_wh40k_companion_client" sequence="1"
+              action="action_wh40k_companion_app" sequence="1"
               groups="wh40k_companion.group_player"/>
 
     <menuitem id="menu_wh40k_rosters" name="Rosters" parent="menu_wh40k_root"

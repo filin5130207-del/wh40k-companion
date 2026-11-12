@@ -2,7 +2,7 @@ import json
 import logging
 import re
 
-from odoo import fields, http
+from odoo import http
 from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.http import request
 from odoo.http.session import authenticate
@@ -13,6 +13,11 @@ _logger = logging.getLogger(__name__)
 
 
 class Wh40kCompanionController(http.Controller):
+    """Thin HTTP/JSON layer for the Battle App PWA.
+
+    Business rules live on model methods; routes authenticate, call models, return DTO.
+    Canonical JSON prefix: ``/wh40k/api/...``. Legacy ``/wh40k/...`` paths stay as aliases.
+    """
 
     def _partner(self):
         partner = request.env.user.partner_id
@@ -20,37 +25,19 @@ class Wh40kCompanionController(http.Controller):
             raise AccessError("No partner linked to the current user.")
         return partner
 
-    def _error(self, exc):
+    def _json_error(self, exc):
+        if isinstance(exc, AccessError):
+            _logger.warning("WH40k access denied: %s", exc)
+            return {"ok": False, "error": str(exc)}
+        if isinstance(exc, (UserError, ValidationError)):
+            return {"ok": False, "error": str(exc)}
         _logger.exception("WH40k companion error")
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": "Internal server error."}
 
-    def _active_match_payload(self, partner):
-        """Return a lightweight summary of the player's in-progress match, if any."""
-        Match = request.env["wh40k.match"]
-        match = Match.search(
-            [
-                ("state", "=", "active"),
-                "|",
-                ("host_id", "=", partner.id),
-                ("guest_id", "=", partner.id),
-            ],
-            limit=1,
-            order="write_date desc, id desc",
-        )
-        if not match:
-            return None
-        is_host = match.host_id.id == partner.id
-        opponent = match.guest_id if is_host else match.host_id
-        return {
-            "id": match.id,
-            "state": match.state,
-            "points": match.points,
-            "mission_name": match.mission_id.name if match.mission_id else "",
-            "opponent_nickname": (
-                (opponent.wh40k_nickname or opponent.name) if opponent else ""
-            ),
-            "is_host": is_host,
-        }
+    def _ok(self, **payload):
+        data = {"ok": True}
+        data.update(payload)
+        return data
 
     def _public_base_url(self):
         """Prefer a non-loopback host so QR/join links work on LAN phones."""
@@ -83,7 +70,13 @@ class Wh40kCompanionController(http.Controller):
             data = roster_json
         return BattlescribeParser(data)
 
-    # ------------------------------------------------------------ public auth
+    def _pwa_render_values(self):
+        return {
+            "session_info": request.env["ir.http"].get_frontend_session_info(),
+            "debug": request.session.debug if hasattr(request.session, "debug") else "",
+        }
+
+    # ------------------------------------------------------------ public pages
     @http.route("/wh40k", type="http", auth="public", website=False, sitemap=False)
     def wh40k_landing(self, **kwargs):
         return request.render(
@@ -125,7 +118,7 @@ class Wh40kCompanionController(http.Controller):
                     raise UserError("This nickname is already taken.")
                 group_player = request.env.ref("wh40k_companion.group_player")
                 action = request.env.ref(
-                    "wh40k_companion.action_wh40k_companion_client",
+                    "wh40k_companion.action_wh40k_companion_app",
                     raise_if_not_found=False,
                 )
                 user = Users.with_context(no_reset_password=True).create(
@@ -134,13 +127,11 @@ class Wh40kCompanionController(http.Controller):
                         "login": email,
                         "email": email,
                         "password": password,
-                        # Dedicated app group (implies base.group_user / regular tier).
                         "group_ids": [(6, 0, [group_player.id])],
                         "action_id": action.id if action else False,
                     }
                 )
                 user.partner_id.sudo().write({"wh40k_nickname": nickname})
-                # Land straight in Battle App (avoid blank /odoo home or portal toast).
                 credential = {
                     "login": email,
                     "password": password,
@@ -153,7 +144,7 @@ class Wh40kCompanionController(http.Controller):
                 return request.redirect("/wh40k/app")
             except (UserError, ValidationError) as exc:
                 error = str(exc)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — show signup failure to user
                 _logger.exception("WH40k signup failed")
                 error = str(exc)
         return request.render(
@@ -166,693 +157,416 @@ class Wh40kCompanionController(http.Controller):
             },
         )
 
-    def _battle_app_action(self):
-        return request.env.ref(
-            "wh40k_companion.action_wh40k_companion_client", raise_if_not_found=False
-        )
-
-    def _redirect_to_battle_app(self, join_token=None):
-        """Open the Owl Battle App; stash join token in session + hash (SPA-safe)."""
-        action = self._battle_app_action()
-        if not action:
-            return request.redirect("/odoo")
-        if join_token:
-            request.session["wh40k_pending_join"] = join_token
-            return request.redirect(
-                f"/odoo/action-{action.id}#wh40k_join={join_token}"
-            )
-        return request.redirect(f"/odoo/action-{action.id}")
-
-    @http.route("/wh40k/app", type="http", auth="user", website=False)
-    def wh40k_app_redirect(self, **kwargs):
+    @http.route(
+        ["/wh40k/app", "/wh40k/app/<path:_rest>"],
+        type="http",
+        auth="user",
+        website=False,
+        sitemap=False,
+    )
+    def wh40k_app(self, _rest=None, **kwargs):
+        """Battle App PWA shell (standalone OWL), not the backend client action."""
         join = (
             kwargs.get("wh40k_join")
             or kwargs.get("join")
             or request.session.get("wh40k_pending_join")
             or ""
         )
-        return self._redirect_to_battle_app(join_token=join or None)
+        if join:
+            request.session["wh40k_pending_join"] = join
+        return request.render("wh40k_companion.pwa_shell", self._pwa_render_values())
 
-    # ------------------------------------------------------------------ roster
+    @http.route(
+        "/wh40k/manifest.webmanifest",
+        type="http",
+        auth="public",
+        methods=["GET"],
+        website=False,
+        sitemap=False,
+        csrf=False,
+    )
+    def wh40k_manifest(self, **kwargs):
+        base = self._public_base_url() or ""
+        manifest = {
+            "name": "WH40k Battle Companion",
+            "short_name": "Battle App",
+            "description": "Rosters, QR matchmaking, and in-game wound tracking.",
+            "start_url": "/wh40k/app",
+            "scope": "/wh40k/",
+            "display": "standalone",
+            "background_color": "#0e1319",
+            "theme_color": "#b85324",
+            "lang": "ru",
+            "icons": [
+                {
+                    "src": f"{base}/wh40k_companion/static/description/icon.png",
+                    "sizes": "192x192",
+                    "type": "image/png",
+                    "purpose": "any",
+                },
+                {
+                    "src": f"{base}/wh40k_companion/static/description/icon.png",
+                    "sizes": "512x512",
+                    "type": "image/png",
+                    "purpose": "any maskable",
+                },
+            ],
+        }
+        return request.make_response(
+            json.dumps(manifest),
+            headers=[
+                ("Content-Type", "application/manifest+json"),
+                ("Cache-Control", "public, max-age=300"),
+            ],
+        )
+
+    @http.route(
+        "/wh40k/sw.js",
+        type="http",
+        auth="public",
+        methods=["GET"],
+        website=False,
+        sitemap=False,
+        csrf=False,
+    )
+    def wh40k_service_worker(self, **kwargs):
+        """Served from /wh40k/ so SW scope covers the PWA entry."""
+        try:
+            from odoo.tools.misc import file_path
+
+            path = file_path("wh40k_companion/static/src/pwa/sw.js")
+            with open(path, "r", encoding="utf-8") as handle:
+                content = handle.read()
+        except Exception:
+            _logger.exception("Failed to load PWA service worker")
+            content = (
+                "/* WH40k Battle App SW fallback */\n"
+                "self.addEventListener('install', (e) => self.skipWaiting());\n"
+                "self.addEventListener('activate', (e) => "
+                "e.waitUntil(self.clients.claim()));\n"
+            )
+        return request.make_response(
+            content,
+            headers=[
+                ("Content-Type", "application/javascript; charset=utf-8"),
+                ("Service-Worker-Allowed", "/wh40k/"),
+                ("Cache-Control", "no-cache"),
+            ],
+        )
+
+    # ================================================================ JSON API
+    def _api_roster_preview(self, roster_json=None, **kwargs):
+        parser = self._parse_roster_payload(roster_json=roster_json, **kwargs)
+        return self._ok(preview=parser.preview())
+
+    def _api_roster_import(self, roster_json=None, name=None, **kwargs):
+        partner = self._partner()
+        parser = self._parse_roster_payload(roster_json=roster_json, **kwargs)
+        parsed = parser.parse()
+        if name:
+            parsed["name"] = name
+        roster = request.env["wh40k.roster"].action_import_parsed(partner, parsed)
+        return self._ok(
+            roster_id=roster.id,
+            name=roster.name,
+            points_used=roster.points_used,
+            points_limit=roster.points_limit,
+            summary=parser.summary(),
+            preview=parser.preview(),
+        )
+
+    def _api_dashboard(self, **kwargs):
+        partner = self._partner()
+        payload = partner.get_wh40k_dashboard(
+            pending_join_token=request.session.get("wh40k_pending_join") or ""
+        )
+        return self._ok(**payload)
+
+    def _api_match_active(self, **kwargs):
+        partner = self._partner()
+        return self._ok(
+            active_match=request.env["wh40k.match"].get_active_summary_for_partner(
+                partner
+            )
+        )
+
+    def _api_set_nickname(self, nickname=None, **kwargs):
+        partner = self._partner()
+        value = partner.action_wh40k_set_nickname(nickname)
+        return self._ok(nickname=value)
+
+    def _api_list_missions(self, **kwargs):
+        return self._ok(missions=request.env["wh40k.mission"].list_active_dicts())
+
+    def _api_match_create(self, roster_id=None, mission_id=None, points="2000", **kwargs):
+        partner = self._partner()
+        roster = request.env["wh40k.roster"].browse(int(roster_id))
+        mission = (
+            request.env["wh40k.mission"].browse(int(mission_id)) if mission_id else False
+        )
+        match = request.env["wh40k.match"].action_create_for_host(
+            partner, roster, mission, points
+        )
+        return self._ok(match_id=match.id, match_token=match.match_token)
+
+    def _api_match_publish(self, match_id=None, **kwargs):
+        partner = self._partner()
+        match = request.env["wh40k.match"].browse(int(match_id))
+        if not match.exists() or match.host_id.id != partner.id:
+            raise UserError("Match not found.")
+        match.action_publish()
+        return self._ok(**match.to_publish_dict(base_url=self._public_base_url()))
+
+    def _api_match_verify(self, match_token=None, **kwargs):
+        match = request.env["wh40k.match"].find_by_token(match_token)
+        payload = match.to_verify_dict()
+        pending = request.session.get("wh40k_pending_join")
+        if pending and match_token and pending == match_token:
+            request.session.pop("wh40k_pending_join", None)
+        return self._ok(**payload)
+
+    def _api_match_accept(self, match_token=None, **kwargs):
+        partner = self._partner()
+        match = request.env["wh40k.match"].find_by_token(match_token)
+        match.action_accept_invite(partner)
+        return self._ok(**match.to_eligible_rosters_dict(partner))
+
+    def _api_match_join(self, match_token=None, roster_id=None, **kwargs):
+        partner = self._partner()
+        match = request.env["wh40k.match"].find_by_token(match_token)
+        roster = request.env["wh40k.roster"].browse(int(roster_id))
+        if not roster.exists():
+            raise UserError("Invalid roster.")
+        if match.state == "waiting":
+            match.action_accept_invite(partner)
+        match.action_join(partner, roster)
+        return self._ok(match_id=match.id, state=match.state)
+
+    def _api_eligible_rosters(self, match_token=None, **kwargs):
+        partner = self._partner()
+        match = request.env["wh40k.match"].find_by_token(match_token)
+        return self._ok(**match.to_eligible_rosters_dict(partner))
+
+    def _api_match_state(self, match_id=None, **kwargs):
+        partner = self._partner()
+        match = request.env["wh40k.match"].browse(int(match_id))
+        if not match.exists():
+            raise UserError("Match not found.")
+        return self._ok(
+            match=match.to_state_dict(partner, base_url=self._public_base_url())
+        )
+
+    def _api_match_unit_state(self, match_id=None, unit_state=None, **kwargs):
+        partner = self._partner()
+        match = request.env["wh40k.match"].browse(int(match_id))
+        if not match.exists():
+            raise UserError("Match not found.")
+        match._assert_participant(partner)
+        match.action_update_unit_state(unit_state, updating_partner=partner)
+        return self._ok()
+
+    def _api_match_surrender(self, match_id=None, **kwargs):
+        partner = self._partner()
+        match = request.env["wh40k.match"].browse(int(match_id))
+        if not match.exists():
+            raise UserError("Match not found.")
+        match.action_surrender(partner)
+        return self._ok(**match.to_surrender_result_dict(partner))
+
+    def _api_match_cancel(self, match_id=None, reason=None, **kwargs):
+        partner = self._partner()
+        match = request.env["wh40k.match"].browse(int(match_id))
+        if not match.exists() or match.host_id.id != partner.id:
+            raise UserError("Match not found.")
+        if match.state == "cancelled":
+            return self._ok(
+                state=match.state, cancel_reason=match.cancel_reason or ""
+            )
+        cancel_reason = (reason or "").strip() or "Отменено хостом"
+        match.action_cancel(reason=cancel_reason)
+        return self._ok(state=match.state, cancel_reason=match.cancel_reason or "")
+
+    def _api_roster_detail(self, roster_id, **kwargs):
+        partner = self._partner()
+        # Browse with sudo so owner-domain ACL does not 404 opponent reads;
+        # to_detail_dict enforces owner / active-match participant checks.
+        roster = request.env["wh40k.roster"].sudo().browse(int(roster_id))
+        if not roster.exists():
+            raise UserError("Roster not found.")
+        return self._ok(roster=roster.to_detail_dict(partner))
+
+    def _wrap(self, fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001 — normalized JSON errors for PWA
+            return self._json_error(exc)
+
+    # ---- canonical /wh40k/api/* ------------------------------------------------
+    @http.route("/wh40k/api/roster/preview", type="jsonrpc", auth="user", methods=["POST"])
+    def api_roster_preview(self, roster_json=None, **kwargs):
+        return self._wrap(self._api_roster_preview, roster_json=roster_json, **kwargs)
+
+    @http.route("/wh40k/api/roster/import", type="jsonrpc", auth="user", methods=["POST"])
+    def api_roster_import(self, roster_json=None, name=None, **kwargs):
+        return self._wrap(
+            self._api_roster_import, roster_json=roster_json, name=name, **kwargs
+        )
+
+    @http.route("/wh40k/api/player/dashboard", type="jsonrpc", auth="user")
+    def api_player_dashboard(self, **kwargs):
+        return self._wrap(self._api_dashboard, **kwargs)
+
+    @http.route("/wh40k/api/match/active", type="jsonrpc", auth="user")
+    def api_match_active(self, **kwargs):
+        return self._wrap(self._api_match_active, **kwargs)
+
+    @http.route("/wh40k/api/player/nickname", type="jsonrpc", auth="user")
+    def api_set_nickname(self, nickname=None, **kwargs):
+        return self._wrap(self._api_set_nickname, nickname=nickname, **kwargs)
+
+    @http.route("/wh40k/api/missions", type="jsonrpc", auth="user")
+    def api_list_missions(self, **kwargs):
+        return self._wrap(self._api_list_missions, **kwargs)
+
+    @http.route("/wh40k/api/match/create", type="jsonrpc", auth="user")
+    def api_match_create(self, roster_id=None, mission_id=None, points="2000", **kwargs):
+        return self._wrap(
+            self._api_match_create,
+            roster_id=roster_id,
+            mission_id=mission_id,
+            points=points,
+            **kwargs,
+        )
+
+    @http.route("/wh40k/api/match/publish", type="jsonrpc", auth="user")
+    def api_match_publish(self, match_id=None, **kwargs):
+        return self._wrap(self._api_match_publish, match_id=match_id, **kwargs)
+
+    @http.route("/wh40k/api/match/verify", type="jsonrpc", auth="user")
+    def api_match_verify(self, match_token=None, **kwargs):
+        return self._wrap(self._api_match_verify, match_token=match_token, **kwargs)
+
+    @http.route("/wh40k/api/match/accept", type="jsonrpc", auth="user")
+    def api_match_accept(self, match_token=None, **kwargs):
+        return self._wrap(self._api_match_accept, match_token=match_token, **kwargs)
+
+    @http.route("/wh40k/api/match/join", type="jsonrpc", auth="user")
+    def api_match_join(self, match_token=None, roster_id=None, **kwargs):
+        return self._wrap(
+            self._api_match_join, match_token=match_token, roster_id=roster_id, **kwargs
+        )
+
+    @http.route("/wh40k/api/match/eligible_rosters", type="jsonrpc", auth="user")
+    def api_eligible_rosters(self, match_token=None, **kwargs):
+        return self._wrap(self._api_eligible_rosters, match_token=match_token, **kwargs)
+
+    @http.route("/wh40k/api/match/state", type="jsonrpc", auth="user")
+    def api_match_state(self, match_id=None, **kwargs):
+        return self._wrap(self._api_match_state, match_id=match_id, **kwargs)
+
+    @http.route(
+        "/wh40k/api/match/unit_state", type="jsonrpc", auth="user", methods=["POST"]
+    )
+    def api_match_unit_state(self, match_id=None, unit_state=None, **kwargs):
+        return self._wrap(
+            self._api_match_unit_state,
+            match_id=match_id,
+            unit_state=unit_state,
+            **kwargs,
+        )
+
+    @http.route("/wh40k/api/match/surrender", type="jsonrpc", auth="user")
+    def api_match_surrender(self, match_id=None, **kwargs):
+        return self._wrap(self._api_match_surrender, match_id=match_id, **kwargs)
+
+    @http.route("/wh40k/api/match/cancel", type="jsonrpc", auth="user")
+    def api_match_cancel(self, match_id=None, reason=None, **kwargs):
+        return self._wrap(
+            self._api_match_cancel, match_id=match_id, reason=reason, **kwargs
+        )
+
+    @http.route(
+        "/wh40k/api/roster/<int:roster_id>/detail", type="jsonrpc", auth="user"
+    )
+    def api_roster_detail(self, roster_id, **kwargs):
+        return self._wrap(self._api_roster_detail, roster_id, **kwargs)
+
+    # ---- legacy aliases (same handlers) ---------------------------------------
     @http.route("/wh40k/roster/preview", type="jsonrpc", auth="user", methods=["POST"])
     def roster_preview(self, roster_json=None, **kwargs):
-        try:
-            parser = self._parse_roster_payload(roster_json=roster_json, **kwargs)
-            preview = parser.preview()
-            return {"ok": True, "preview": preview}
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_roster_preview(roster_json=roster_json, **kwargs)
 
     @http.route("/wh40k/roster/import", type="jsonrpc", auth="user", methods=["POST"])
     def roster_import(self, roster_json=None, name=None, **kwargs):
-        try:
-            partner = self._partner()
-            parser = self._parse_roster_payload(roster_json=roster_json, **kwargs)
-            parsed = parser.parse()
-            if name:
-                parsed["name"] = name
-            roster = self._create_roster(partner, parsed)
-            return {
-                "ok": True,
-                "roster_id": roster.id,
-                "name": roster.name,
-                "points_used": roster.points_used,
-                "points_limit": roster.points_limit,
-                "summary": parser.summary(),
-                "preview": parser.preview(),
-            }
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_roster_import(roster_json=roster_json, name=name, **kwargs)
 
-    def _create_roster(self, partner, parsed):
-        env = request.env
-        Rule = env["wh40k.rule"]
-        force_cmds = []
-        for force in parsed["forces"]:
-            army_rule_ids = []
-            for rule in force.get("army_rules") or []:
-                rec = Rule.create(
-                    {
-                        "name": rule["name"],
-                        "description": rule.get("description"),
-                        "external_id": rule.get("external_id"),
-                    }
-                )
-                army_rule_ids.append(rec.id)
-
-            det_cmds = []
-            for det in force.get("detachments") or []:
-                det_rule_ids = []
-                for rule in det.get("rules") or []:
-                    rec = Rule.create(
-                        {
-                            "name": rule["name"],
-                            "description": rule.get("description"),
-                            "external_id": rule.get("external_id"),
-                        }
-                    )
-                    det_rule_ids.append(rec.id)
-
-                unit_cmds = []
-                for unit in det.get("units") or []:
-                    model_cmds = []
-                    for model in unit.get("models") or []:
-                        weapon_cmds = [
-                            (
-                                0,
-                                0,
-                                {
-                                    "name": w["name"],
-                                    "weapon_type": w["weapon_type"],
-                                    "range": w.get("range"),
-                                    "attacks": w.get("attacks"),
-                                    "skill": w.get("skill"),
-                                    "strength": w.get("strength"),
-                                    "ap": w.get("ap"),
-                                    "damage": w.get("damage"),
-                                    "keywords": w.get("keywords"),
-                                },
-                            )
-                            for w in model.get("weapons") or []
-                        ]
-                        model_ability_cmds = [
-                            (
-                                0,
-                                0,
-                                {
-                                    "name": a["name"],
-                                    "description": a.get("description"),
-                                },
-                            )
-                            for a in model.get("abilities") or []
-                        ]
-                        model_cmds.append(
-                            (
-                                0,
-                                0,
-                                {
-                                    "name": model["name"],
-                                    "quantity": model.get("quantity") or 1,
-                                    "movement": model.get("movement"),
-                                    "toughness": model.get("toughness"),
-                                    "save": model.get("save"),
-                                    "wounds": model.get("wounds"),
-                                    "leadership": model.get("leadership"),
-                                    "objective_control": model.get("objective_control"),
-                                    "invuln_save": model.get("invuln_save"),
-                                    "base": model.get("base"),
-                                    "weapon_ids": weapon_cmds,
-                                    "ability_ids": model_ability_cmds,
-                                },
-                            )
-                        )
-                    unit_ability_cmds = [
-                        (
-                            0,
-                            0,
-                            {
-                                "name": a["name"],
-                                "description": a.get("description"),
-                            },
-                        )
-                        for a in unit.get("abilities") or []
-                    ]
-                    models_total = sum((m.get("quantity") or 1) for m in unit.get("models") or [])
-                    unit_cmds.append(
-                        (
-                            0,
-                            0,
-                            {
-                                "name": unit["name"],
-                                "quantity": unit.get("quantity") or 1,
-                                "points": unit.get("points") or 0,
-                                "keywords": unit.get("keywords"),
-                                "current_models": models_total or unit.get("quantity") or 1,
-                                "model_ids": model_cmds,
-                                "ability_ids": unit_ability_cmds,
-                            },
-                        )
-                    )
-
-                det_cmds.append(
-                    (
-                        0,
-                        0,
-                        {
-                            "name": det["name"],
-                            "detachment_rule_ids": [(6, 0, det_rule_ids)],
-                            "unit_ids": unit_cmds,
-                        },
-                    )
-                )
-
-            force_cmds.append(
-                (
-                    0,
-                    0,
-                    {
-                        "name": force["name"],
-                        "catalogue_name": force.get("catalogue_name"),
-                        "army_rule_ids": [(6, 0, army_rule_ids)],
-                        "detachment_ids": det_cmds,
-                    },
-                )
-            )
-
-        return env["wh40k.roster"].create(
-            {
-                "name": parsed["name"],
-                "game_system": parsed.get("game_system"),
-                "points_limit": parsed.get("points_limit") or 2000,
-                "points_used": parsed.get("points_used") or 0,
-                "partner_id": partner.id,
-                "force_ids": force_cmds,
-            }
-        )
-
-    # ----------------------------------------------------------------- profile
     @http.route("/wh40k/player/dashboard", type="jsonrpc", auth="user")
     def player_dashboard(self, **kwargs):
-        try:
-            partner = self._partner()
-            rosters = request.env["wh40k.roster"].search(
-                [("partner_id", "=", partner.id)], order="create_date desc"
-            )
-            return {
-                "ok": True,
-                "player": {
-                    "id": partner.id,
-                    "name": partner.name,
-                    "nickname": partner.wh40k_nickname or partner.name,
-                    "has_nickname": bool(partner.wh40k_nickname),
-                    "wins": partner.wh40k_wins,
-                    "losses": partner.wh40k_losses,
-                    "total_match": partner.wh40k_total_match,
-                    "win_rate": partner.wh40k_win_rate,
-                },
-                "pending_join_token": request.session.get("wh40k_pending_join") or "",
-                "active_match": self._active_match_payload(partner),
-                "rosters": [
-                    {
-                        "id": r.id,
-                        "name": r.name,
-                        "game_system": r.game_system,
-                        "points_limit": r.points_limit,
-                        "points_used": r.points_used,
-                        "unit_count": r.unit_count,
-                    }
-                    for r in rosters
-                ],
-            }
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_player_dashboard(**kwargs)
 
     @http.route("/wh40k/match/active", type="jsonrpc", auth="user")
     def match_active(self, **kwargs):
-        try:
-            partner = self._partner()
-            return {"ok": True, "active_match": self._active_match_payload(partner)}
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_match_active(**kwargs)
 
     @http.route("/wh40k/player/nickname", type="jsonrpc", auth="user")
     def set_nickname(self, nickname=None, **kwargs):
-        try:
-            partner = self._partner()
-            if not nickname or not str(nickname).strip():
-                raise UserError("Nickname is required.")
-            partner.wh40k_nickname = str(nickname).strip()
-            return {"ok": True, "nickname": partner.wh40k_nickname}
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_set_nickname(nickname=nickname, **kwargs)
 
-    # ---------------------------------------------------------------- missions
     @http.route("/wh40k/missions", type="jsonrpc", auth="user")
     def list_missions(self, **kwargs):
-        try:
-            missions = request.env["wh40k.mission"].search([("active", "=", True)])
-            return {
-                "ok": True,
-                "missions": [
-                    {
-                        "id": m.id,
-                        "name": m.name,
-                        "description": m.description or "",
-                        "deployment": m.deployment or "",
-                    }
-                    for m in missions
-                ],
-            }
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_list_missions(**kwargs)
 
-    # ------------------------------------------------------------------- match
     @http.route("/wh40k/match/create", type="jsonrpc", auth="user")
     def match_create(self, roster_id=None, mission_id=None, points="2000", **kwargs):
-        try:
-            partner = self._partner()
-            roster = request.env["wh40k.roster"].browse(int(roster_id))
-            if not roster.exists() or roster.partner_id.id != partner.id:
-                raise UserError("Invalid host roster.")
-            mission = request.env["wh40k.mission"].browse(int(mission_id)) if mission_id else False
-            if mission_id and not mission.exists():
-                raise UserError("Invalid mission.")
-            points = str(points)
-            if points not in ("1000", "2000"):
-                raise UserError("Points must be 1000 or 2000.")
-            match = request.env["wh40k.match"].create(
-                {
-                    "host_id": partner.id,
-                    "host_roster_id": roster.id,
-                    "mission_id": mission.id if mission else False,
-                    "points": points,
-                    "state": "draft",
-                }
-            )
-            return {"ok": True, "match_id": match.id, "match_token": match.match_token}
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_match_create(
+            roster_id=roster_id, mission_id=mission_id, points=points, **kwargs
+        )
 
     @http.route("/wh40k/match/publish", type="jsonrpc", auth="user")
     def match_publish(self, match_id=None, **kwargs):
-        try:
-            partner = self._partner()
-            match = request.env["wh40k.match"].browse(int(match_id))
-            if not match.exists() or match.host_id.id != partner.id:
-                raise UserError("Match not found.")
-            match.action_publish()
-            join_url = match.get_join_url(base_url=self._public_base_url())
-            expires_at = match.waiting_expires_at()
-            return {
-                "ok": True,
-                "match_id": match.id,
-                "state": match.state,
-                "match_token": match.match_token,
-                "join_url": join_url,
-                "published_at": fields.Datetime.to_string(match.published_at)
-                if match.published_at
-                else None,
-                "expires_at": fields.Datetime.to_string(expires_at) if expires_at else None,
-                "waiting_seconds": match.WAITING_TIMEOUT_MINUTES * 60,
-            }
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_match_publish(match_id=match_id, **kwargs)
 
     @http.route("/wh40k/match/verify", type="jsonrpc", auth="user")
     def match_verify(self, match_token=None, **kwargs):
-        try:
-            match = request.env["wh40k.match"].search(
-                [("match_token", "=", match_token)], limit=1
-            )
-            if not match:
-                raise UserError("Invalid match token.")
-            if match.state == "waiting" and match.is_waiting_expired():
-                match.action_cancel(reason="Таймаут ожидания противника")
-                raise UserError("Waiting timeout expired. Match was cancelled.")
-            if match.state not in ("waiting", "selecting"):
-                raise UserError(f"Match is not joinable (state={match.state}).")
-            if match.guest_id and match.state == "waiting":
-                raise UserError("A guest has already joined this match.")
-            host_roster = match.host_roster_id
-            payload = {
-                "ok": True,
-                "match_id": match.id,
-                "state": match.state,
-                "points": match.points,
-                "mission": {
-                    "id": match.mission_id.id,
-                    "name": match.mission_id.name,
-                }
-                if match.mission_id
-                else None,
-                "host": {
-                    "id": match.host_id.id,
-                    "nickname": match.host_id.wh40k_nickname or match.host_id.name,
-                },
-                "host_roster": {
-                    "id": host_roster.id,
-                    "name": host_roster.name,
-                    "points_used": host_roster.points_used,
-                    "faction": (
-                        host_roster.force_ids[:1].catalogue_name
-                        or host_roster.force_ids[:1].name
-                        or host_roster.game_system
-                        or ""
-                    )
-                    if host_roster.force_ids
-                    else (host_roster.game_system or ""),
-                }
-                if host_roster
-                else None,
-            }
-            pending = request.session.get("wh40k_pending_join")
-            if pending and match_token and pending == match_token:
-                request.session.pop("wh40k_pending_join", None)
-            return payload
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_match_verify(match_token=match_token, **kwargs)
 
     @http.route("/wh40k/match/accept", type="jsonrpc", auth="user")
     def match_accept(self, match_token=None, **kwargs):
-        try:
-            partner = self._partner()
-            match = request.env["wh40k.match"].search(
-                [("match_token", "=", match_token)], limit=1
-            )
-            if not match:
-                raise UserError("Invalid match token.")
-            match.action_accept_invite(partner)
-            limit = int(match.points)
-            rosters = request.env["wh40k.roster"].search(
-                [
-                    ("partner_id", "=", partner.id),
-                    ("points_used", "<=", limit),
-                ]
-            )
-            return {
-                "ok": True,
-                "match_id": match.id,
-                "state": match.state,
-                "points": match.points,
-                "rosters": [
-                    {
-                        "id": r.id,
-                        "name": r.name,
-                        "points_used": r.points_used,
-                        "points_limit": r.points_limit,
-                    }
-                    for r in rosters
-                ],
-            }
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_match_accept(match_token=match_token, **kwargs)
 
     @http.route("/wh40k/match/join", type="jsonrpc", auth="user")
     def match_join(self, match_token=None, roster_id=None, **kwargs):
-        try:
-            partner = self._partner()
-            match = request.env["wh40k.match"].search(
-                [("match_token", "=", match_token)], limit=1
-            )
-            if not match:
-                raise UserError("Invalid match token.")
-            roster = request.env["wh40k.roster"].browse(int(roster_id))
-            if not roster.exists():
-                raise UserError("Invalid roster.")
-            if match.state == "waiting":
-                match.action_accept_invite(partner)
-            match.action_join(partner, roster)
-            return {
-                "ok": True,
-                "match_id": match.id,
-                "state": match.state,
-            }
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_match_join(
+            match_token=match_token, roster_id=roster_id, **kwargs
+        )
 
     @http.route("/wh40k/match/eligible_rosters", type="jsonrpc", auth="user")
     def eligible_rosters(self, match_token=None, **kwargs):
-        try:
-            partner = self._partner()
-            match = request.env["wh40k.match"].search(
-                [("match_token", "=", match_token)], limit=1
-            )
-            if not match:
-                raise UserError("Invalid match token.")
-            limit = int(match.points)
-            rosters = request.env["wh40k.roster"].search(
-                [
-                    ("partner_id", "=", partner.id),
-                    ("points_used", "<=", limit),
-                ]
-            )
-            return {
-                "ok": True,
-                "points": match.points,
-                "rosters": [
-                    {
-                        "id": r.id,
-                        "name": r.name,
-                        "points_used": r.points_used,
-                        "points_limit": r.points_limit,
-                    }
-                    for r in rosters
-                ],
-            }
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_eligible_rosters(match_token=match_token, **kwargs)
 
     @http.route("/wh40k/match/state", type="jsonrpc", auth="user")
     def match_state(self, match_id=None, **kwargs):
-        try:
-            partner = self._partner()
-            match = request.env["wh40k.match"].browse(int(match_id))
-            if not match.exists():
-                raise UserError("Match not found.")
-            if partner.id not in (match.host_id.id, match.guest_id.id or 0) and match.host_id.id != partner.id:
-                # Host can always read; guest after join
-                if match.host_id.id != partner.id:
-                    raise AccessError("Not a participant of this match.")
-            # Cancel expired waiting matches on poll so the host is not stuck
-            # on the QR screen until the 5-minute cron fires.
-            if match.state == "waiting" and match.is_waiting_expired():
-                match.action_cancel(reason="Таймаут ожидания противника")
-            unit_state = {}
-            try:
-                unit_state = json.loads(match.unit_state or "{}")
-            except json.JSONDecodeError:
-                unit_state = {}
-            expires_at = match.waiting_expires_at()
-            return {
-                "ok": True,
-                "match": {
-                    "id": match.id,
-                    "state": match.state,
-                    "points": match.points,
-                    "match_token": match.match_token,
-                    "join_url": match.get_join_url(base_url=self._public_base_url())
-                    if match.state == "waiting"
-                    else None,
-                    "published_at": fields.Datetime.to_string(match.published_at)
-                    if match.published_at
-                    else None,
-                    "expires_at": fields.Datetime.to_string(expires_at) if expires_at else None,
-                    "cancel_reason": match.cancel_reason or "",
-                    "mission": {
-                        "id": match.mission_id.id,
-                        "name": match.mission_id.name,
-                        "description": match.mission_id.description or "",
-                    }
-                    if match.mission_id
-                    else None,
-                    "host": {
-                        "id": match.host_id.id,
-                        "nickname": match.host_id.wh40k_nickname or match.host_id.name,
-                    },
-                    "guest": {
-                        "id": match.guest_id.id,
-                        "nickname": match.guest_id.wh40k_nickname or match.guest_id.name,
-                    }
-                    if match.guest_id
-                    else None,
-                    "host_roster_id": match.host_roster_id.id,
-                    "guest_roster_id": match.guest_roster_id.id,
-                    "winner_id": match.winner_id.id if match.winner_id else None,
-                    "winner_nickname": (
-                        (match.winner_id.wh40k_nickname or match.winner_id.name)
-                        if match.winner_id
-                        else ""
-                    ),
-                    "unit_state": unit_state,
-                    "is_host": match.host_id.id == partner.id,
-                },
-            }
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_match_state(match_id=match_id, **kwargs)
 
     @http.route("/wh40k/match/unit_state", type="jsonrpc", auth="user", methods=["POST"])
     def match_unit_state(self, match_id=None, unit_state=None, **kwargs):
-        try:
-            partner = self._partner()
-            match = request.env["wh40k.match"].browse(int(match_id))
-            if not match.exists():
-                raise UserError("Match not found.")
-            if partner.id not in (match.host_id.id, match.guest_id.id):
-                raise AccessError("Not a participant of this match.")
-            match.action_update_unit_state(unit_state, updating_partner=partner)
-            return {"ok": True}
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_match_unit_state(
+            match_id=match_id, unit_state=unit_state, **kwargs
+        )
 
     @http.route("/wh40k/match/surrender", type="jsonrpc", auth="user")
     def match_surrender(self, match_id=None, **kwargs):
-        try:
-            partner = self._partner()
-            match = request.env["wh40k.match"].browse(int(match_id))
-            if not match.exists():
-                raise UserError("Match not found.")
-            match.action_surrender(partner)
-            winner = match.winner_id
-            you_won = winner and winner.id == partner.id
-            return {
-                "ok": True,
-                "state": match.state,
-                "winner_id": winner.id,
-                "winner_nickname": winner.wh40k_nickname or winner.name,
-                "you_won": bool(you_won),
-                "you_surrendered": not you_won,
-                "message": (
-                    "Победа! Противник сдался."
-                    if you_won
-                    else "Поражение. Вы сдались."
-                ),
-            }
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_match_surrender(match_id=match_id, **kwargs)
 
     @http.route("/wh40k/match/cancel", type="jsonrpc", auth="user")
     def match_cancel(self, match_id=None, reason=None, **kwargs):
-        try:
-            partner = self._partner()
-            match = request.env["wh40k.match"].browse(int(match_id))
-            if not match.exists() or match.host_id.id != partner.id:
-                raise UserError("Match not found.")
-            if match.state == "cancelled":
-                return {
-                    "ok": True,
-                    "state": match.state,
-                    "cancel_reason": match.cancel_reason or "",
-                }
-            cancel_reason = (reason or "").strip() or "Отменено хостом"
-            match.action_cancel(reason=cancel_reason)
-            return {
-                "ok": True,
-                "state": match.state,
-                "cancel_reason": match.cancel_reason or "",
-            }
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_match_cancel(match_id=match_id, reason=reason, **kwargs)
 
     @http.route("/wh40k/roster/<int:roster_id>/detail", type="jsonrpc", auth="user")
     def roster_detail(self, roster_id, **kwargs):
-        try:
-            roster = request.env["wh40k.roster"].browse(roster_id)
-            if not roster.exists():
-                raise UserError("Roster not found.")
-            units = []
-            rules = []
-            for force in roster.force_ids:
-                for rule in force.army_rule_ids:
-                    rules.append({"name": rule.name, "description": rule.description or "", "scope": "army"})
-                for det in force.detachment_ids:
-                    for rule in det.detachment_rule_ids:
-                        rules.append(
-                            {"name": rule.name, "description": rule.description or "", "scope": "detachment"}
-                        )
-                    for unit in det.unit_ids:
-                        models = []
-                        for model in unit.model_ids:
-                            models.append(
-                                {
-                                    "id": model.id,
-                                    "name": model.name,
-                                    "quantity": model.quantity,
-                                    "M": model.movement,
-                                    "T": model.toughness,
-                                    "Sv": model.save,
-                                    "W": model.wounds,
-                                    "LD": model.leadership,
-                                    "OC": model.objective_control,
-                                    "InSv": model.invuln_save,
-                                    "Base": model.base,
-                                    "weapons": [
-                                        {
-                                            "name": w.name,
-                                            "weapon_type": w.weapon_type,
-                                            "range": w.range,
-                                            "A": w.attacks,
-                                            "skill": w.skill,
-                                            "S": w.strength,
-                                            "AP": w.ap,
-                                            "D": w.damage,
-                                            "keywords": w.keywords,
-                                        }
-                                        for w in model.weapon_ids
-                                    ],
-                                    "abilities": [
-                                        {"name": a.name, "description": a.description or ""}
-                                        for a in model.ability_ids
-                                    ],
-                                }
-                            )
-                        units.append(
-                            {
-                                "id": unit.id,
-                                "name": unit.name,
-                                "points": unit.points,
-                                "keywords": unit.keywords,
-                                "quantity": unit.quantity,
-                                "abilities": [
-                                    {"name": a.name, "description": a.description or ""}
-                                    for a in unit.ability_ids
-                                ],
-                                "models": models,
-                            }
-                        )
-            return {
-                "ok": True,
-                "roster": {
-                    "id": roster.id,
-                    "name": roster.name,
-                    "points_used": roster.points_used,
-                    "points_limit": roster.points_limit,
-                    "units": units,
-                    "rules": rules,
-                },
-            }
-        except Exception as exc:
-            return self._error(exc)
+        return self.api_roster_detail(roster_id, **kwargs)
 
+    # ------------------------------------------------------------------- misc
     @http.route(
         "/wh40k/qr.png",
         type="http",
@@ -901,7 +615,7 @@ class Wh40kCompanionController(http.Controller):
         sitemap=False,
     )
     def join_redirect(self, match_token, **kwargs):
-        """QR / deep-link entry: stash token and open in-app join (after login if needed)."""
+        """QR / deep-link entry: stash token and open PWA join (after login if needed)."""
         token = (match_token or "").strip()
         if not re.match(r"^[a-fA-F0-9-]{16,64}$", token):
             return request.redirect("/wh40k?error=Invalid+join+link")
@@ -915,4 +629,4 @@ class Wh40kCompanionController(http.Controller):
                     "signup_url": f"/wh40k/signup?join={token}",
                 },
             )
-        return self._redirect_to_battle_app(join_token=token)
+        return request.redirect(f"/wh40k/app?wh40k_join={token}")

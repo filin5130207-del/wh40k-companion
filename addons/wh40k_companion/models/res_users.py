@@ -15,6 +15,8 @@ class ResUsers(models.Model):
     @api.model
     def _wh40k_battle_action(self):
         return self.env.ref(
+            "wh40k_companion.action_wh40k_companion_app", raise_if_not_found=False
+        ) or self.env.ref(
             "wh40k_companion.action_wh40k_companion_client", raise_if_not_found=False
         )
 

@@ -1,18 +1,9 @@
 /** @odoo-module **/
 
-import { Component, proxy, signal, onWillStart, onMounted, onWillUnmount, useProps } from "@odoo/owl";
-import { registry } from "@web/core/registry";
+import { Component, proxy, signal, onWillStart, onMounted, onWillUnmount } from "@odoo/owl";
 import { rpc } from "@web/core/network/rpc";
-import { standardActionServiceProps } from "@web/webclient/actions/action_plugin";
-import { tourState } from "@web_tour/tour_state";
 
-function clearStaleTourState() {
-    try {
-        tourState.clear();
-    } catch (_e) {
-        // Tour state missing / private mode — ignore
-    }
-}
+const API = "/wh40k/api";
 
 function extractJoinToken() {
     const hash = window.location.hash || "";
@@ -69,17 +60,13 @@ function parseOdooDatetime(value) {
 
 export class Wh40kCompanionApp extends Component {
     static template = "wh40k_companion.CompanionApp";
-    props = useProps({
-        ...standardActionServiceProps,
-    });
+    static props = {};
     rosterFile = signal.ref();
 
     setup() {
         const initialJoinToken = extractJoinToken();
         if (initialJoinToken) {
             rememberJoinToken(initialJoinToken);
-            // Avoid TourPlugin.resumeTour crash over #wh40k_join=... deep links.
-            clearStaleTourState();
         }
         this.state = proxy({
             screen: "home",
@@ -358,7 +345,7 @@ export class Wh40kCompanionApp extends Component {
             this.state.busy = true;
             this.state.datasheet = null;
             this.state.rosterDetailPaneMode = "units";
-            const data = await this.rpc(`/wh40k/roster/${rosterId}/detail`);
+            const data = await this.rpc(`${API}/roster/${rosterId}/detail`);
             const roster = data.roster || null;
             this.state.rosterDetail = roster;
             this._rosterCache = this._rosterCache || {};
@@ -406,7 +393,7 @@ export class Wh40kCompanionApp extends Component {
     }
 
     async loadDashboard() {
-        const data = await this.rpc("/wh40k/player/dashboard");
+        const data = await this.rpc(`${API}/player/dashboard`);
         this.state.player = data.player;
         this.state.rosters = data.rosters || [];
         this.state.needsNickname = !(data.player && data.player.has_nickname);
@@ -422,7 +409,7 @@ export class Wh40kCompanionApp extends Component {
 
     async refreshActiveMatch() {
         try {
-            const data = await this.rpc("/wh40k/match/active");
+            const data = await this.rpc(`${API}/match/active`);
             this.state.activeMatch = data.active_match || null;
         } catch (_e) {
             // non-fatal; banner simply stays as-is
@@ -449,7 +436,7 @@ export class Wh40kCompanionApp extends Component {
     }
 
     async loadMissions() {
-        const data = await this.rpc("/wh40k/missions");
+        const data = await this.rpc(`${API}/missions`);
         this.state.missions = data.missions || [];
         if (!this.state.create.mission_id && this.state.missions.length) {
             this.state.create.mission_id = this.state.missions[0].id;
@@ -463,7 +450,7 @@ export class Wh40kCompanionApp extends Component {
     async saveNickname() {
         try {
             this.state.busy = true;
-            await this.rpc("/wh40k/player/nickname", { nickname: this.state.player.nickname });
+            await this.rpc(`${API}/player/nickname`, { nickname: this.state.player.nickname });
             await this.loadDashboard();
             this.state.needsNickname = false;
             this.state.busy = false;
@@ -491,7 +478,7 @@ export class Wh40kCompanionApp extends Component {
             try {
                 this.state.pendingRosterJson = JSON.parse(reader.result);
                 this.state.busy = true;
-                const data = await this.rpc("/wh40k/roster/preview", {
+                const data = await this.rpc(`${API}/roster/preview`, {
                     roster_json: this.state.pendingRosterJson,
                 });
                 this.state.importPreview = data.preview;
@@ -523,7 +510,7 @@ export class Wh40kCompanionApp extends Component {
         }
         try {
             this.state.busy = true;
-            await this.rpc("/wh40k/roster/import", {
+            await this.rpc(`${API}/roster/import`, {
                 roster_json: this.state.pendingRosterJson,
             });
             await this.loadDashboard();
@@ -560,12 +547,12 @@ export class Wh40kCompanionApp extends Component {
         }
         try {
             this.state.busy = true;
-            const created = await this.rpc("/wh40k/match/create", {
+            const created = await this.rpc(`${API}/match/create`, {
                 roster_id: this.state.create.roster_id,
                 mission_id: this.state.create.mission_id,
                 points: this.state.create.points,
             });
-            const published = await this.rpc("/wh40k/match/publish", {
+            const published = await this.rpc(`${API}/match/publish`, {
                 match_id: created.match_id,
             });
             this.state.waiting = {
@@ -608,7 +595,7 @@ export class Wh40kCompanionApp extends Component {
         const matchId = this.state.waiting.match_id;
         try {
             if (matchId) {
-                await this.rpc("/wh40k/match/cancel", {
+                await this.rpc(`${API}/match/cancel`, {
                     match_id: matchId,
                     reason: "Таймаут ожидания противника",
                 });
@@ -661,7 +648,7 @@ export class Wh40kCompanionApp extends Component {
             return;
         }
         try {
-            const data = await this.rpc("/wh40k/match/state", {
+            const data = await this.rpc(`${API}/match/state`, {
                 match_id: this.state.waiting.match_id,
             });
             if (data.match.expires_at) {
@@ -704,7 +691,7 @@ export class Wh40kCompanionApp extends Component {
             return;
         }
         try {
-            const data = await this.rpc("/wh40k/match/state", {
+            const data = await this.rpc(`${API}/match/state`, {
                 match_id: this.state.match.id,
             });
             const match = data.match || {};
@@ -810,7 +797,7 @@ export class Wh40kCompanionApp extends Component {
             return;
         }
         try {
-            await this.rpc("/wh40k/match/cancel", {
+            await this.rpc(`${API}/match/cancel`, {
                 match_id: this.state.waiting.match_id,
             });
             this.clearWaitingState();
@@ -851,7 +838,7 @@ export class Wh40kCompanionApp extends Component {
             if (this.state.screen === "join" && this.state.join.step !== "invite") {
                 this.state.join.step = "loading";
             }
-            const verified = await this.rpc("/wh40k/match/verify", {
+            const verified = await this.rpc(`${API}/match/verify`, {
                 match_token: this.state.join.token,
             });
             this.state.join.verified = true;
@@ -875,7 +862,7 @@ export class Wh40kCompanionApp extends Component {
     async acceptInvite() {
         try {
             this.state.busy = true;
-            const accepted = await this.rpc("/wh40k/match/accept", {
+            const accepted = await this.rpc(`${API}/match/accept`, {
                 match_token: this.state.join.token,
             });
             this.state.join.step = "selecting";
@@ -916,7 +903,7 @@ export class Wh40kCompanionApp extends Component {
         }
         try {
             this.state.busy = true;
-            const joined = await this.rpc("/wh40k/match/join", {
+            const joined = await this.rpc(`${API}/match/join`, {
                 match_token: this.state.join.token,
                 roster_id: this.state.join.roster_id,
             });
@@ -928,7 +915,7 @@ export class Wh40kCompanionApp extends Component {
     }
 
     async enterGame(matchId) {
-        const data = await this.rpc("/wh40k/match/state", { match_id: matchId });
+        const data = await this.rpc(`${API}/match/state`, { match_id: matchId });
         if (data.match.state !== "active") {
             this.state.activeMatch = null;
             throw new Error(
@@ -972,13 +959,13 @@ export class Wh40kCompanionApp extends Component {
             : data.match.host_roster_id;
         this._rosterCache = this._rosterCache || {};
         if (ownRosterId) {
-            const detail = await this.rpc(`/wh40k/roster/${ownRosterId}/detail`);
+            const detail = await this.rpc(`${API}/roster/${ownRosterId}/detail`);
             this._rosterCache[ownRosterId] = detail.roster;
             this.state.ownRules = detail.roster?.rules || [];
             this.state.rules = this.state.ownRules;
         }
         if (oppRosterId) {
-            const other = await this.rpc(`/wh40k/roster/${oppRosterId}/detail`);
+            const other = await this.rpc(`${API}/roster/${oppRosterId}/detail`);
             this._rosterCache[oppRosterId] = other.roster;
             this.state.oppRules = other.roster?.rules || [];
         }
@@ -1122,7 +1109,7 @@ export class Wh40kCompanionApp extends Component {
     }
 
     async persistUnitState() {
-        await this.rpc("/wh40k/match/unit_state", {
+        await this.rpc(`${API}/match/unit_state`, {
             match_id: this.state.match.id,
             unit_state: {
                 host: this.state.unitState.host || [],
@@ -1220,7 +1207,7 @@ export class Wh40kCompanionApp extends Component {
         try {
             this.state.busy = true;
             this.state.showSurrenderModal = false;
-            const result = await this.rpc("/wh40k/match/surrender", {
+            const result = await this.rpc(`${API}/match/surrender`, {
                 match_id: this.state.match.id,
             });
             await this.goHomeAfterMatchEnd({
@@ -1236,4 +1223,3 @@ export class Wh40kCompanionApp extends Component {
     }
 }
 
-registry.category("actions").add("wh40k_companion_app", Wh40kCompanionApp);

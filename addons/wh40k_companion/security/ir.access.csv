@@ -6,6 +6,6 @@ access_wh40k_model_user,wh40k.model player,wh40k.model,wh40k_companion.group_pla
 access_wh40k_unit_user,wh40k.unit player,wh40k.unit,wh40k_companion.group_player,crud,
 access_wh40k_detachment_user,wh40k.detachment player,wh40k.detachment,wh40k_companion.group_player,crud,
 access_wh40k_force_user,wh40k.force player,wh40k.force,wh40k_companion.group_player,crud,
-access_wh40k_roster_user,wh40k.roster player,wh40k.roster,wh40k_companion.group_player,crud,
+access_wh40k_roster_user,wh40k.roster player,wh40k.roster,wh40k_companion.group_player,crud,"[('partner_id', '=', user.partner_id.id)]"
 access_wh40k_mission_user,wh40k.mission player,wh40k.mission,wh40k_companion.group_player,crud,
 access_wh40k_match_user,wh40k.match player,wh40k.match,wh40k_companion.group_player,crud,

@@ -76,7 +76,7 @@
             <div class="wh40k-app wh40k-public">
                 <section class="wh40k-panel">
                     <h2>Приглашение в матч</h2>
-                    <p class="wh40k-muted">Войдите или зарегистрируйтесь — после этого откроется приглашение в Battle App (без копирования ссылки).</p>
+                    <p class="wh40k-muted">Войдите или зарегистрируйтесь — после этого откроется PWA Battle App с приглашением (без копирования ссылки).</p>
                     <div class="wh40k-row">
                         <a class="wh40k-btn wh40k-btn-primary" t-att-href="login_url">Войти и присоединиться</a>
                         <a class="wh40k-btn wh40k-btn-success" t-att-href="signup_url">Регистрация</a>
