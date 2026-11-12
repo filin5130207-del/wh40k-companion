@@ -26,8 +26,6 @@ class Wh40kRoster(models.Model):
     ability_count = fields.Integer(compute="_compute_counts")
 
     @api.depends(
-        "force_ids",
-        "force_ids.detachment_ids",
         "force_ids.detachment_ids.unit_ids",
         "force_ids.detachment_ids.unit_ids.model_ids",
         "force_ids.detachment_ids.unit_ids.model_ids.weapon_ids",
