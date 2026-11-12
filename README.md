@@ -37,13 +37,22 @@ docker compose restart odoo
 
 This repo includes `odpm.json` targeting Odoo **20.0**.
 
+**Persistent start** (keeps Docker volume / user accounts — no `--db-drop`):
+
 ```bash
-pip install odpm
-# from a parent workspace directory, initialize against this repo, or place odpm.json
-# at the project root (already present) and follow odpm prepare/run docs for your scenario.
-odpm plan --plan-no-docker   # inspect planned steps when Docker is available use: odpm plan
-odpm -d wh40k -i wh40k_companion
+scripts/odpm_up.bat          # Windows → WSL Debian
+# or in WSL: bash scripts/odpm_up.sh
 ```
+
+```bash
+pip install odpm             # Linux/WSL (Windows native odpm lacks `grp`)
+# from the ODPM project cwd (e.g. /home/odoo/wh40k-odpm), not only the git root:
+odpm plan --plan-no-docker   # inspect planned steps; with Docker: odpm plan
+odpm -d wh40k -i wh40k_companion   # first install only
+odpm -d wh40k -u wh40k_companion   # later upgrades — do not use --db-drop
+```
+
+Use `odpm --db-drop` only when you intentionally wipe the database. Details: [docs/odpm.md](docs/odpm.md).
 
 See [aayartsev/odpm](https://github.com/aayartsev/odpm) for full developer/server/CI scenarios.
 
