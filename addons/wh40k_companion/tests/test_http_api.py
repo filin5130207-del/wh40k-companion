@@ -253,12 +253,14 @@ class TestWh40kHttpApi(HttpCase):
         self.assertTrue(match, "csrf_token missing on signup page")
         return match.group(1)
 
+    def _clear_http_session(self):
+        # Prefer anonymous authenticate: logout() crashes when self.session is None
+        # (Odoo 20), e.g. after allow_redirects=False signup that only sets cookies.
+        self.authenticate(None, None)
+
     def test_unauthenticated_api_rejected(self):
         # Drop any prior HttpCase session from sibling tests.
-        if hasattr(self, "logout"):
-            self.logout()
-        else:
-            self.url_open("/web/session/logout")
+        self._clear_http_session()
         body = self._jsonrpc_result_or_rpc_error(
             "/wh40k/api/player/dashboard", {}
         )
@@ -269,10 +271,7 @@ class TestWh40kHttpApi(HttpCase):
         )
 
     def test_signup_happy_and_duplicate(self):
-        if hasattr(self, "logout"):
-            self.logout()
-        else:
-            self.url_open("/web/session/logout")
+        self._clear_http_session()
         email = "wh40k_signup_new@example.com"
         csrf = self._signup_csrf()
         response = self.url_open(
@@ -296,10 +295,7 @@ class TestWh40kHttpApi(HttpCase):
         self.assertEqual(user.partner_id.wh40k_nickname, "SignupNick99")
 
         # Duplicate email (fresh csrf; may still be logged in after signup)
-        if hasattr(self, "logout"):
-            self.logout()
-        else:
-            self.url_open("/web/session/logout")
+        self._clear_http_session()
         csrf2 = self._signup_csrf()
         dup = self.url_open(
             "/wh40k/signup",

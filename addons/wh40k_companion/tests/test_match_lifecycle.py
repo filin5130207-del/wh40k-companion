@@ -36,7 +36,10 @@ class TestWh40kMatchLifecycle(Wh40kPlayerMixin, TransactionCase):
 
         match.with_user(self.user_b).action_accept_invite(self.user_b.partner_id)
         self.assertEqual(match.state, "selecting")
-        eligible = match.to_eligible_rosters_dict(self.user_b.partner_id)
+        # Eligible search respects roster ACL — must run as the guest player.
+        eligible = match.with_user(self.user_b).to_eligible_rosters_dict(
+            self.user_b.partner_id
+        )
         self.assertTrue(any(r["id"] == guest_roster.id for r in eligible["rosters"]))
 
         match.with_user(self.user_b).action_join(self.user_b.partner_id, guest_roster)
@@ -110,7 +113,12 @@ class TestWh40kMatchLifecycle(Wh40kPlayerMixin, TransactionCase):
         )
         match = self._publish_match(self.user_a, host_roster, points="1000")
         match.with_user(self.user_b).action_accept_invite(self.user_b.partner_id)
-        eligible_ids = {r.id for r in match.eligible_rosters_for(self.user_b.partner_id)}
+        eligible_ids = {
+            r.id
+            for r in match.with_user(self.user_b).eligible_rosters_for(
+                self.user_b.partner_id
+            )
+        }
         self.assertIn(ok.id, eligible_ids)
         self.assertNotIn(too_big.id, eligible_ids)
         with self.assertRaises(ValidationError):
