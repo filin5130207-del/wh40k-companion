@@ -83,6 +83,8 @@ export class Wh40kCompanionApp extends Component {
                 win_rate: 0,
             },
             rosters: [],
+            rosterDetail: null, // full roster from /wh40k/roster/<id>/detail
+            rosterDetailPaneMode: "units", // units | rules
             missions: [],
             importPreview: null,
             create: {
@@ -172,6 +174,7 @@ export class Wh40kCompanionApp extends Component {
             "home",
             "dashboard",
             "rosters",
+            "roster_detail",
             "create_match",
             "join",
             "import_preview",
@@ -267,6 +270,22 @@ export class Wh40kCompanionApp extends Component {
         return this.state.oppRules || [];
     }
 
+    get rosterDetailUnits() {
+        return (this.state.rosterDetail && this.state.rosterDetail.units) || [];
+    }
+
+    get rosterDetailRules() {
+        return (this.state.rosterDetail && this.state.rosterDetail.rules) || [];
+    }
+
+    rosterUnitLabel(unit) {
+        const pts = unit.points != null ? `${unit.points} pts` : "";
+        const qty = unit.quantity != null ? `×${unit.quantity}` : "";
+        const models = (unit.models || []).reduce((n, m) => n + (m.quantity || 0), 0);
+        const modelBit = models ? `${models} models` : "";
+        return [pts, qty, modelBit].filter(Boolean).join(" · ") || "Даташит";
+    }
+
     unitStatusLabel(unit) {
         return (
             "Models " +
@@ -305,7 +324,47 @@ export class Wh40kCompanionApp extends Component {
 
     setScreen(screen) {
         this.state.error = "";
-        this.state.screen = screen === "dashboard" ? "home" : screen;
+        const next = screen === "dashboard" ? "home" : screen;
+        this.state.screen = next;
+        if (next !== "roster_detail" && next !== "game") {
+            this.state.datasheet = null;
+        }
+        if (next !== "roster_detail") {
+            this.state.rosterDetailPaneMode = "units";
+        }
+    }
+
+    async openRosterDetail(rosterId) {
+        if (!rosterId) {
+            return;
+        }
+        try {
+            this.state.busy = true;
+            this.state.datasheet = null;
+            this.state.rosterDetailPaneMode = "units";
+            const data = await this.rpc(`/wh40k/roster/${rosterId}/detail`);
+            const roster = data.roster || null;
+            this.state.rosterDetail = roster;
+            this._rosterCache = this._rosterCache || {};
+            if (roster && roster.id) {
+                this._rosterCache[roster.id] = roster;
+            }
+            this.state.busy = false;
+            this.setScreen("roster_detail");
+        } catch (e) {
+            this.setError(e.message || "Не удалось открыть ростер.");
+        }
+    }
+
+    closeRosterDetail() {
+        this.state.datasheet = null;
+        this.state.rosterDetailPaneMode = "units";
+        this.setScreen("rosters");
+    }
+
+    toggleRosterDetailPaneMode() {
+        this.state.rosterDetailPaneMode =
+            this.state.rosterDetailPaneMode === "rules" ? "units" : "rules";
     }
 
     openManualJoin() {
@@ -842,6 +901,11 @@ export class Wh40kCompanionApp extends Component {
     }
 
     openDatasheet(unit) {
+        // Roster-detail units already carry models/weapons; match units need cache lookup.
+        if (unit && Array.isArray(unit.models)) {
+            this.state.datasheet = unit;
+            return;
+        }
         this.state.datasheet = this.findUnitDetail(unit);
     }
 

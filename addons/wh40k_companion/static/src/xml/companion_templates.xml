@@ -14,6 +14,9 @@
         <t t-elif="this.state.screen === 'rosters'">
             <t t-call="wh40k_companion.RostersScreen"/>
         </t>
+        <t t-elif="this.state.screen === 'roster_detail'">
+            <t t-call="wh40k_companion.RosterDetailScreen"/>
+        </t>
         <t t-elif="this.state.screen === 'import_preview'">
             <t t-call="wh40k_companion.ImportPreview"/>
         </t>
@@ -35,7 +38,7 @@
 
         <nav t-if="this.showBottomNav" class="wh40k-bottom-nav" aria-label="Основная навигация">
             <button type="button" class="wh40k-nav-circle"
-                    t-att-class="{'active': this.state.screen === 'rosters' || this.state.screen === 'import_preview'}"
+                    t-att-class="{'active': this.state.screen === 'rosters' || this.state.screen === 'roster_detail' || this.state.screen === 'import_preview'}"
                     t-on-click="() => this.setScreen('rosters')"
                     aria-label="Мои ростеры" title="Мои ростеры">
                 <span class="wh40k-nav-glyph" aria-hidden="true">R</span>
@@ -116,19 +119,79 @@
             <input class="wh40k-file" type="file" accept="application/json,.json" t-ref="this.rosterFile" t-on-change="this.onRosterFile"/>
             <span class="wh40k-muted">Импортировать ростер (JSON)</span>
         </div>
-        <p class="wh40k-muted">Выберите NewRecruit / Battlescribe JSON — сначала превью, затем подтверждение.</p>
-        <ul class="wh40k-list">
+        <p class="wh40k-muted">Выберите NewRecruit / Battlescribe JSON — сначала превью, затем подтверждение. Нажмите ростер, чтобы открыть юниты и правила (только просмотр).</p>
+        <div class="wh40k-list">
             <t t-foreach="this.state.rosters" t-as="roster" t-key="roster.id">
-                <li class="wh40k-list-item">
+                <button type="button" class="wh40k-list-item"
+                        t-on-click="() => this.openRosterDetail(roster.id)"
+                        t-att-disabled="this.state.busy">
                     <div>
                         <strong t-out="roster.name"/>
                         <div class="wh40k-muted" t-out="roster.points_used + ' / ' + roster.points_limit + ' pts | ' + roster.unit_count + ' units'"/>
                     </div>
-                </li>
+                </button>
             </t>
-        </ul>
+        </div>
         <p t-if="!this.state.rosters.length" class="wh40k-muted">Нет ростеров. Импортируйте testdata/aufychi.json.</p>
     </section>
+</t>
+
+<t t-name="wh40k_companion.RosterDetailScreen">
+    <section class="wh40k-panel" t-if="this.state.rosterDetail">
+        <div class="wh40k-side-title">
+            <div class="wh40k-pane-heading">
+                <h2 style="margin:0;" t-out="this.state.rosterDetail.name"/>
+                <span class="wh40k-muted"
+                      t-out="this.state.rosterDetail.points_used + ' / ' + this.state.rosterDetail.points_limit + ' pts · только просмотр'"/>
+            </div>
+            <button type="button" class="wh40k-btn" t-on-click="this.closeRosterDetail">Назад</button>
+        </div>
+        <p class="wh40k-swipe-hint">Как в матче: список юнитов и даташит по нажатию. Иконка § переключает юниты / правила армии. Без -W / -M / Destroy.</p>
+    </section>
+
+    <section class="wh40k-panel wh40k-roster-detail-pane" t-if="this.state.rosterDetail">
+        <div class="wh40k-side-title">
+            <div class="wh40k-pane-heading">
+                <h3 style="margin:0;" t-out="this.state.rosterDetailPaneMode === 'rules' ? 'Правила армии' : 'Юниты'"/>
+                <span class="wh40k-muted">Просмотр ростера</span>
+            </div>
+            <button type="button"
+                    class="wh40k-btn wh40k-rules-toggle"
+                    t-att-class="{'active': this.state.rosterDetailPaneMode === 'rules'}"
+                    t-att-aria-pressed="this.state.rosterDetailPaneMode === 'rules' ? 'true' : 'false'"
+                    t-att-title="this.state.rosterDetailPaneMode === 'rules' ? 'Показать ростер' : 'Правила армии'"
+                    t-on-click="this.toggleRosterDetailPaneMode">
+                <span class="wh40k-rules-icon" aria-hidden="true">§</span>
+                <span t-out="this.state.rosterDetailPaneMode === 'rules' ? 'Ростер' : 'Правила'"/>
+            </button>
+        </div>
+
+        <t t-if="this.state.rosterDetailPaneMode === 'rules'">
+            <div class="wh40k-pane-rules">
+                <t t-foreach="this.rosterDetailRules" t-as="rule" t-key="'rd-' + rule.name + rule.scope">
+                    <div class="wh40k-rule-block">
+                        <strong t-out="rule.name"/>
+                        <span class="wh40k-muted" t-out="' (' + rule.scope + ')'"/>
+                        <div class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.description"/>
+                    </div>
+                </t>
+                <p t-if="!this.rosterDetailRules.length" class="wh40k-muted">Нет army/detachment правил для этого ростера.</p>
+            </div>
+        </t>
+        <t t-else="">
+            <t t-foreach="this.rosterDetailUnits" t-as="unit" t-key="unit.id">
+                <div class="wh40k-unit-card wh40k-unit-readonly"
+                     t-on-click="() => this.openDatasheet(unit)">
+                    <strong t-out="unit.name"/>
+                    <div class="wh40k-muted" t-out="this.rosterUnitLabel(unit)"/>
+                    <div class="wh40k-muted wh40k-readonly-hint">Даташит · без изменения состояния</div>
+                </div>
+            </t>
+            <p t-if="!this.rosterDetailUnits.length" class="wh40k-muted">Нет юнитов в ростере.</p>
+        </t>
+    </section>
+
+    <t t-call="wh40k_companion.DatasheetModal"/>
 </t>
 
 <t t-name="wh40k_companion.ImportPreview">
@@ -406,6 +469,32 @@
         </div>
     </div>
 
+    <t t-call="wh40k_companion.DatasheetModal"/>
+
+    <t t-if="this.state.showSurrenderModal">
+        <div class="wh40k-modal-backdrop" t-on-click="this.closeSurrenderModal">
+            <div class="wh40k-modal" t-on-click.stop="">
+                <h3>Вы уверены, что хотите сдаться?</h3>
+                <p class="wh40k-muted">Это действие нельзя отменить. Ваш противник будет объявлен победителем.</p>
+                <div class="wh40k-row">
+                    <button class="wh40k-btn" t-on-click="this.closeSurrenderModal">Отмена</button>
+                    <button class="wh40k-btn wh40k-btn-danger" t-on-click="this.confirmSurrender" t-att-disabled="this.state.busy">Да, сдаться</button>
+                </div>
+            </div>
+        </div>
+    </t>
+</t>
+
+<t t-name="wh40k_companion.MatchResultScreen">
+    <section class="wh40k-panel" style="text-align:center;">
+        <h2 t-out="this.state.result.you_won ? 'Победа!' : 'Поражение'"/>
+        <p style="font-size: 1.2rem; font-weight: 600;" t-out="this.state.result.message"/>
+        <p class="wh40k-muted">Победитель: <t t-out="this.state.result.winner_nickname"/></p>
+        <button class="wh40k-btn wh40k-btn-primary" t-on-click="() => this.setScreen('dashboard')">На главный экран</button>
+    </section>
+</t>
+
+<t t-name="wh40k_companion.DatasheetModal">
     <t t-if="this.state.datasheet">
         <div class="wh40k-modal-backdrop" t-on-click="this.closeDatasheet">
             <div class="wh40k-modal" t-on-click.stop="">
@@ -432,28 +521,6 @@
             </div>
         </div>
     </t>
-
-    <t t-if="this.state.showSurrenderModal">
-        <div class="wh40k-modal-backdrop" t-on-click="this.closeSurrenderModal">
-            <div class="wh40k-modal" t-on-click.stop="">
-                <h3>Вы уверены, что хотите сдаться?</h3>
-                <p class="wh40k-muted">Это действие нельзя отменить. Ваш противник будет объявлен победителем.</p>
-                <div class="wh40k-row">
-                    <button class="wh40k-btn" t-on-click="this.closeSurrenderModal">Отмена</button>
-                    <button class="wh40k-btn wh40k-btn-danger" t-on-click="this.confirmSurrender" t-att-disabled="this.state.busy">Да, сдаться</button>
-                </div>
-            </div>
-        </div>
-    </t>
-</t>
-
-<t t-name="wh40k_companion.MatchResultScreen">
-    <section class="wh40k-panel" style="text-align:center;">
-        <h2 t-out="this.state.result.you_won ? 'Победа!' : 'Поражение'"/>
-        <p style="font-size: 1.2rem; font-weight: 600;" t-out="this.state.result.message"/>
-        <p class="wh40k-muted">Победитель: <t t-out="this.state.result.winner_nickname"/></p>
-        <button class="wh40k-btn wh40k-btn-primary" t-on-click="() => this.setScreen('dashboard')">На главный экран</button>
-    </section>
 </t>
 
 </templates>

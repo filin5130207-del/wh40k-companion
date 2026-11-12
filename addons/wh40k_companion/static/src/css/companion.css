@@ -514,6 +514,10 @@
     cursor: pointer;
 }
 
+.wh40k-roster-detail-pane {
+    animation: wh40k-fade 0.2s ease-out;
+}
+
 .wh40k-readonly-hint {
     margin-top: 0.4rem;
     font-size: 0.75rem;
