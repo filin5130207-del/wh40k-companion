@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { reactive } from "@odoo/owl";
+import { proxy } from "@odoo/owl";
 import {
     API,
     extractJoinToken,
@@ -34,9 +34,9 @@ export {
 };
 
 /**
- * Reactive battle store. Mutations should go through named actions on the
+ * Owl proxy battle store. Mutations should go through named actions on the
  * CompanionApp controller so OWL re-renders stay predictable.
  */
 export function createBattleStore(initialJoinToken = "") {
-    return reactive(createInitialState(initialJoinToken));
+    return proxy(createInitialState(initialJoinToken));
 }

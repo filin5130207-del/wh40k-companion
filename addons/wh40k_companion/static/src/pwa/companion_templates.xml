@@ -5,7 +5,7 @@
     <div class="wh40k-app o_wh40k_companion" t-att-class="{'wh40k-app-with-nav': this.showBottomNav}">
         <div t-if="this.state.error" class="wh40k-error" t-out="this.state.error"/>
 
-        <Wh40kErrorBoundary onRecover.bind="recoverFromRenderError">
+        <Wh40kErrorBoundary onRecover.bind="this.recoverFromRenderError">
             <t t-if="this.state.screen === 'nickname'">
                 <NicknameGate app="this"/>
             </t>

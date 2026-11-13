@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component } from "@odoo/owl";
+import { Component, t, useProps } from "@odoo/owl";
 
 /**
  * Thin screen host: templates keep calling methods on `this.app`.
@@ -9,9 +9,9 @@ import { Component } from "@odoo/owl";
 function makeScreen(templateName) {
     return class extends Component {
         static template = templateName;
-        static props = {
-            app: { type: Object },
-        };
+        props = useProps({
+            app: t.object(),
+        });
 
         setup() {
             this.app = this.props.app;

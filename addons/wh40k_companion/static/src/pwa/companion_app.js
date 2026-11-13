@@ -33,7 +33,6 @@ import {
 
 export class Wh40kCompanionApp extends Component {
     static template = "wh40k_companion.CompanionApp";
-    static props = {};
     static components = {
         Wh40kErrorBoundary,
         NicknameGate,

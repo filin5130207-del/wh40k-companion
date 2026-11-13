@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.16.0",
+    "version": "20.0.1.17.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,11 +11,11 @@ create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
-20.0.1.16.0 highlights:
-- Expanded automated TransactionCase/HttpCase coverage (parser, roster, match
-  lifecycle, unit lines/undo/migration, security/stats, HTTP API, PWA assets)
-- Pure JS battle_helpers + Node unit tests for store/wound math
-- Prior 20.0.1.15.0: ACL domains, unit lines ORM, local QR, OWL/watch, i18n
+20.0.1.17.0 highlights:
+- PWA bundle includes Bootstrap _maps.scss so /wh40k/app CSS compiles
+  ($theme-colors-rgb). Standalone assets_pwa does not inherit web.assets_backend.
+- Battle App components use Owl 3 useProps instead of static props.
+- Prior 20.0.1.16.0: automated tests, battle_helpers, ACL, unit lines, local QR.
 """,
     "author": "WH40k Companion",
     "license": "LGPL-3",
@@ -44,13 +44,19 @@ Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
         "wh40k_companion.assets_public": [
             "wh40k_companion/static/src/css/companion.css",
         ],
-        # Standalone PWA (Odoo howto: standalone Owl application).
+        # Standalone PWA. Mirror web.assets_backend / point_of_sale.base_app:
+        # Bootstrap 5 defines $theme-colors-rgb in _maps.scss. Without it,
+        # utilities.scss fails and Odoo serves the red "css error" footer.
         "wh40k_companion.assets_pwa": [
             ("include", "web._assets_helpers"),
+            ("include", "web._assets_backend_helpers"),
             "web/static/src/scss/pre_variables.scss",
             "web/static/lib/bootstrap/scss/_variables.scss",
-            ("include", "web._assets_bootstrap"),
+            "web/static/lib/bootstrap/scss/_variables-dark.scss",
+            "web/static/lib/bootstrap/scss/_maps.scss",
+            ("include", "web._assets_bootstrap_backend"),
             ("include", "web._assets_core"),
+            ("remove", "web/static/src/**/*.dark.scss"),
             "wh40k_companion/static/src/pwa/**/*",
         ],
     },
