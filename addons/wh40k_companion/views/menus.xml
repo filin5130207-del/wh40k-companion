@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_wh40k_root" name="WH40k Companion" sequence="25"
+              web_icon="wh40k_companion,static/description/icon.png"
+              groups="wh40k_companion.group_player"/>
+
+    <menuitem id="menu_wh40k_companion_app" name="Battle App" parent="menu_wh40k_root"
+              action="action_wh40k_companion_app" sequence="1"
+              groups="wh40k_companion.group_player"/>
+
+    <menuitem id="menu_wh40k_rosters" name="Rosters" parent="menu_wh40k_root"
+              action="action_wh40k_roster" sequence="10"
+              groups="wh40k_companion.group_player"/>
+
+    <menuitem id="menu_wh40k_matches" name="Matches" parent="menu_wh40k_root"
+              action="action_wh40k_match" sequence="20"
+              groups="wh40k_companion.group_player"/>
+
+    <menuitem id="menu_wh40k_missions" name="Missions" parent="menu_wh40k_root"
+              action="action_wh40k_mission" sequence="30"
+              groups="wh40k_companion.group_manager"/>
+</odoo>

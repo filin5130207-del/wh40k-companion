@@ -1,0 +1,19 @@
+# ODPM / local runtime
+.odpm/
+user_settings.json
+secrets.json
+*.pyc
+__pycache__/
+*.pyo
+.Python
+.env
+.venv/
+venv/
+.idea/
+.vscode/
+*.egg-info/
+.DS_Store
+filestore/
+odoo-web-data/
+postgres-data/
+*.log

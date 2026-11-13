@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="pwa_shell" name="WH40k Battle App PWA">
+        <html lang="ru">
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+                <meta name="theme-color" content="#b85324"/>
+                <meta name="mobile-web-app-capable" content="yes"/>
+                <meta name="apple-mobile-web-app-capable" content="yes"/>
+                <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+                <meta name="apple-mobile-web-app-title" content="Battle App"/>
+                <link rel="manifest" href="/wh40k/manifest.webmanifest"/>
+                <link rel="icon" type="image/png" href="/wh40k_companion/static/description/icon.png"/>
+                <link rel="apple-touch-icon" href="/wh40k_companion/static/description/icon.png"/>
+                <title>WH40k Battle App</title>
+                <script type="text/javascript">
+                    var odoo = {
+                        csrf_token: "<t t-out="request.csrf_token(None)"/>",
+                        debug: "<t t-out="debug"/>",
+                        __session_info__: <t t-out="json.dumps(session_info)"/>,
+                    };
+                </script>
+                <t t-call-assets="wh40k_companion.assets_pwa"/>
+            </head>
+            <body class="wh40k-pwa-body o_web_client"/>
+        </html>
+    </template>
+</odoo>

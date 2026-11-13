@@ -1,0 +1,23 @@
+id,name,model_id,group_id/id,operation,domain
+access_wh40k_rule_player,wh40k.rule player,wh40k.rule,wh40k_companion.group_player,crud,"['|', ('owner_partner_id', '=', user.partner_id.id), ('owner_partner_id', '=', False)]"
+access_wh40k_rule_manager,wh40k.rule manager,wh40k.rule,wh40k_companion.group_manager,crud,
+access_wh40k_ability_player,wh40k.ability player,wh40k.ability,wh40k_companion.group_player,crud,"['|', ('unit_id.detachment_id.force_id.roster_id.partner_id', '=', user.partner_id.id), ('model_id.unit_id.detachment_id.force_id.roster_id.partner_id', '=', user.partner_id.id)]"
+access_wh40k_ability_manager,wh40k.ability manager,wh40k.ability,wh40k_companion.group_manager,crud,
+access_wh40k_weapon_player,wh40k.weapon player,wh40k.weapon,wh40k_companion.group_player,crud,"[('model_id.unit_id.detachment_id.force_id.roster_id.partner_id', '=', user.partner_id.id)]"
+access_wh40k_weapon_manager,wh40k.weapon manager,wh40k.weapon,wh40k_companion.group_manager,crud,
+access_wh40k_model_player,wh40k.model player,wh40k.model,wh40k_companion.group_player,crud,"[('unit_id.detachment_id.force_id.roster_id.partner_id', '=', user.partner_id.id)]"
+access_wh40k_model_manager,wh40k.model manager,wh40k.model,wh40k_companion.group_manager,crud,
+access_wh40k_unit_player,wh40k.unit player,wh40k.unit,wh40k_companion.group_player,crud,"[('detachment_id.force_id.roster_id.partner_id', '=', user.partner_id.id)]"
+access_wh40k_unit_manager,wh40k.unit manager,wh40k.unit,wh40k_companion.group_manager,crud,
+access_wh40k_detachment_player,wh40k.detachment player,wh40k.detachment,wh40k_companion.group_player,crud,"[('force_id.roster_id.partner_id', '=', user.partner_id.id)]"
+access_wh40k_detachment_manager,wh40k.detachment manager,wh40k.detachment,wh40k_companion.group_manager,crud,
+access_wh40k_force_player,wh40k.force player,wh40k.force,wh40k_companion.group_player,crud,"[('roster_id.partner_id', '=', user.partner_id.id)]"
+access_wh40k_force_manager,wh40k.force manager,wh40k.force,wh40k_companion.group_manager,crud,
+access_wh40k_roster_player,wh40k.roster player,wh40k.roster,wh40k_companion.group_player,crud,"[('partner_id', '=', user.partner_id.id)]"
+access_wh40k_roster_manager,wh40k.roster manager,wh40k.roster,wh40k_companion.group_manager,crud,
+access_wh40k_mission_player,wh40k.mission player,wh40k.mission,wh40k_companion.group_player,r,
+access_wh40k_mission_manager,wh40k.mission manager,wh40k.mission,wh40k_companion.group_manager,crud,
+access_wh40k_match_player,wh40k.match player,wh40k.match,wh40k_companion.group_player,crud,"['|', ('host_id', '=', user.partner_id.id), ('guest_id', '=', user.partner_id.id)]"
+access_wh40k_match_manager,wh40k.match manager,wh40k.match,wh40k_companion.group_manager,crud,
+access_wh40k_match_unit_line_player,wh40k.match.unit.line player,wh40k.match.unit.line,wh40k_companion.group_player,crud,"['|', ('match_id.host_id', '=', user.partner_id.id), ('match_id.guest_id', '=', user.partner_id.id)]"
+access_wh40k_match_unit_line_manager,wh40k.match.unit.line manager,wh40k.match.unit.line,wh40k_companion.group_manager,crud,

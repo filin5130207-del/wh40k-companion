@@ -1,0 +1,667 @@
+:root {
+    --wh40k-bg: #12161c;
+    --wh40k-bg-elevated: #1a212b;
+    --wh40k-panel: #222b38;
+    --wh40k-border: #334155;
+    --wh40k-text: #e8eef7;
+    --wh40k-muted: #9aa8bc;
+    --wh40k-accent: #c45c26;
+    --wh40k-accent-2: #3d8b6e;
+    --wh40k-danger: #b33a3a;
+    --wh40k-warn: #c9a227;
+    --wh40k-font-display: "Segoe UI", "Trebuchet MS", sans-serif;
+    --wh40k-font-body: "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.wh40k-app {
+    min-height: calc(100vh - 46px);
+    background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(196, 92, 38, 0.18), transparent 60%),
+        radial-gradient(900px 500px at 100% 0%, rgba(61, 139, 110, 0.12), transparent 55%),
+        linear-gradient(180deg, #0e1319 0%, var(--wh40k-bg) 40%, #0b0f14 100%);
+    color: var(--wh40k-text);
+    font-family: var(--wh40k-font-body);
+    padding: 1rem;
+    box-sizing: border-box;
+}
+
+.wh40k-app.wh40k-app-with-nav {
+    display: flex;
+    flex-direction: column;
+    /* Nav bleeds to the physical bottom; keep only safe-area clearance. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/*
+ * Odoo backend client actions sit under .o_action_manager with a fixed
+ * viewport height and overflow:hidden. Without an inner scroll pane, long
+ * Battle App screens (import preview, game units, waiting) are clipped and
+ * cannot scroll with wheel, trackpad, or touch.
+ */
+.o_action_manager > .wh40k-app.o_wh40k_companion {
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+}
+
+.wh40k-app * {
+    box-sizing: border-box;
+}
+
+.wh40k-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    animation: wh40k-fade-up 0.45s ease-out;
+}
+
+.wh40k-brand {
+    font-family: var(--wh40k-font-display);
+    font-size: clamp(1.4rem, 4vw, 2rem);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin: 0;
+}
+
+.wh40k-brand span {
+    color: var(--wh40k-accent);
+}
+
+.wh40k-bottom-nav {
+    position: sticky;
+    bottom: 0;
+    z-index: 40;
+    margin-top: auto;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    align-items: end;
+    gap: 0.35rem;
+    /* Cancel .wh40k-app 1rem padding so the bar meets the screen edges. */
+    margin-left: -1rem;
+    margin-right: -1rem;
+    margin-bottom: -1rem;
+    /* Even circle columns (not edge-stuck); bar itself pin to bottom (safe-area only). */
+    padding-top: 1.25rem;
+    padding-left: calc(1rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(1rem + env(safe-area-inset-right, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background:
+        linear-gradient(180deg, rgba(14, 19, 25, 0) 0%, rgba(14, 19, 25, 0.88) 28%, rgba(11, 15, 20, 0.97) 100%);
+    border-top: 1px solid rgba(51, 65, 85, 0.65);
+    backdrop-filter: blur(8px);
+}
+
+.wh40k-nav-circle {
+    appearance: none;
+    border: 1px solid var(--wh40k-border);
+    background: var(--wh40k-panel);
+    color: var(--wh40k-text);
+    width: 3.1rem;
+    height: 3.1rem;
+    border-radius: 50%;
+    margin: 0 auto;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.05rem;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.wh40k-nav-circle:hover {
+    transform: translateY(-2px);
+    border-color: var(--wh40k-accent);
+}
+
+.wh40k-nav-circle.active {
+    border-color: var(--wh40k-accent);
+    background: rgba(196, 92, 38, 0.22);
+    box-shadow: inset 0 0 0 1px rgba(196, 92, 38, 0.35);
+}
+
+.wh40k-nav-home {
+    width: 3.1rem;
+    height: 3.1rem;
+}
+
+.wh40k-nav-create {
+    width: 3.35rem;
+    height: 3.35rem;
+    background: var(--wh40k-accent);
+    border-color: var(--wh40k-accent);
+    color: #fff;
+}
+
+.wh40k-resume-banner,
+.wh40k-result-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    margin: 0 0 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid rgba(196, 92, 38, 0.55);
+    border-radius: 0.65rem;
+    background:
+        linear-gradient(135deg, rgba(196, 92, 38, 0.22), rgba(61, 139, 110, 0.1));
+}
+
+.wh40k-result-banner.wh40k-result-win {
+    border-color: rgba(61, 139, 110, 0.65);
+    background:
+        linear-gradient(135deg, rgba(61, 139, 110, 0.22), rgba(196, 92, 38, 0.08));
+}
+
+.wh40k-result-banner.wh40k-result-loss {
+    border-color: rgba(160, 64, 48, 0.65);
+    background:
+        linear-gradient(135deg, rgba(160, 64, 48, 0.2), rgba(61, 139, 110, 0.06));
+}
+
+.wh40k-resume-copy {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.wh40k-resume-copy strong {
+    display: block;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+}
+
+.wh40k-nav-create.active,
+.wh40k-nav-create:hover {
+    background: #d46a2f;
+    border-color: #d46a2f;
+    color: #fff;
+}
+
+.wh40k-nav-glyph {
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.wh40k-nav-plus {
+    font-size: 1.55rem;
+    font-weight: 600;
+    line-height: 0.85;
+}
+
+.wh40k-nav-label {
+    position: absolute;
+    left: 50%;
+    bottom: auto;
+    top: -1.05rem;
+    transform: translateX(-50%);
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--wh40k-muted);
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.wh40k-nav-circle.active .wh40k-nav-label {
+    color: var(--wh40k-text);
+}
+
+.wh40k-nav-create .wh40k-nav-label {
+    color: #f3d2bf;
+}
+
+.wh40k-btn {
+    appearance: none;
+    border: 1px solid var(--wh40k-border);
+    background: var(--wh40k-panel);
+    color: var(--wh40k-text);
+    padding: 0.55rem 0.9rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.92rem;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.wh40k-btn:hover {
+    transform: translateY(-1px);
+    border-color: var(--wh40k-accent);
+}
+
+.wh40k-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.wh40k-btn-primary {
+    background: var(--wh40k-accent);
+    border-color: var(--wh40k-accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+.wh40k-btn-success {
+    background: var(--wh40k-accent-2);
+    border-color: var(--wh40k-accent-2);
+    color: #fff;
+}
+
+.wh40k-btn-danger {
+    background: var(--wh40k-danger);
+    border-color: var(--wh40k-danger);
+    color: #fff;
+}
+
+.wh40k-panel {
+    background: rgba(26, 33, 43, 0.92);
+    border: 1px solid var(--wh40k-border);
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    animation: wh40k-fade-up 0.5s ease-out;
+}
+
+.wh40k-panel h2,
+.wh40k-panel h3 {
+    margin: 0 0 0.75rem;
+    font-family: var(--wh40k-font-display);
+    letter-spacing: 0.03em;
+}
+
+.wh40k-muted {
+    color: var(--wh40k-muted);
+}
+
+.wh40k-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 0.75rem;
+}
+
+.wh40k-stat {
+    background: var(--wh40k-bg-elevated);
+    border: 1px solid var(--wh40k-border);
+    border-radius: 4px;
+    padding: 0.75rem;
+    text-align: center;
+}
+
+.wh40k-stat .value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--wh40k-accent);
+}
+
+.wh40k-stat .label {
+    font-size: 0.75rem;
+    color: var(--wh40k-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.wh40k-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.wh40k-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 0.8rem;
+    background: var(--wh40k-bg-elevated);
+    border: 1px solid var(--wh40k-border);
+    border-radius: 4px;
+}
+
+.wh40k-list-item.selected {
+    border-color: var(--wh40k-accent);
+    box-shadow: inset 0 0 0 1px rgba(196, 92, 38, 0.35);
+}
+
+.wh40k-error {
+    background: rgba(179, 58, 58, 0.15);
+    border: 1px solid var(--wh40k-danger);
+    color: #f0c4c4;
+    padding: 0.75rem 0.9rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.wh40k-input,
+.wh40k-select,
+.wh40k-file {
+    width: 100%;
+    background: var(--wh40k-bg);
+    border: 1px solid var(--wh40k-border);
+    color: var(--wh40k-text);
+    border-radius: 4px;
+    padding: 0.55rem 0.7rem;
+    margin-bottom: 0.75rem;
+}
+
+.wh40k-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.wh40k-qr {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+}
+
+.wh40k-qr img {
+    width: min(260px, 80vw);
+    height: auto;
+    min-height: 180px;
+    object-fit: contain;
+    background: #fff;
+    padding: 0.5rem;
+    border-radius: 4px;
+}
+
+.wh40k-game {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.wh40k-game-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+}
+
+.wh40k-game-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+}
+
+.wh40k-game-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--wh40k-border);
+    border-radius: 6px;
+    background: rgba(26, 33, 43, 0.85);
+    color: var(--wh40k-text);
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    min-width: 0;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.wh40k-game-tab-label {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.wh40k-game-tab.active {
+    border-color: var(--wh40k-accent);
+    background: rgba(196, 92, 38, 0.18);
+    box-shadow: inset 0 -2px 0 var(--wh40k-accent);
+}
+
+.wh40k-game-dots {
+    display: flex;
+    justify-content: center;
+    gap: 0.4rem;
+}
+
+.wh40k-game-dot {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--wh40k-border);
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.wh40k-game-dot.active {
+    background: var(--wh40k-accent);
+    transform: scale(1.25);
+}
+
+.wh40k-game-swipe {
+    overflow: hidden;
+    width: 100%;
+    touch-action: pan-y;
+}
+
+.wh40k-game-track {
+    display: flex;
+    width: 200%;
+    transform: translateX(0);
+    transition: transform 0.28s ease-out;
+    will-change: transform;
+}
+
+.wh40k-game-track.wh40k-game-track-opp {
+    transform: translateX(-50%);
+}
+
+.wh40k-game-pane {
+    flex: 0 0 50%;
+    width: 50%;
+    min-width: 0;
+    min-height: 12rem;
+    box-sizing: border-box;
+}
+
+.wh40k-swipe-hint {
+    margin-bottom: 0;
+}
+
+.wh40k-pane-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.wh40k-rules-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+    border-color: var(--wh40k-accent-2);
+}
+
+.wh40k-rules-toggle.active {
+    background: rgba(61, 139, 110, 0.25);
+    border-color: var(--wh40k-accent-2);
+}
+
+.wh40k-rules-icon {
+    font-weight: 700;
+    font-size: 1.05rem;
+    line-height: 1;
+    color: var(--wh40k-accent-2);
+}
+
+.wh40k-pane-rules {
+    animation: wh40k-fade 0.2s ease-out;
+}
+
+.wh40k-rule-block {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 1px solid var(--wh40k-border);
+}
+
+.wh40k-rule-block:last-child {
+    border-bottom: none;
+}
+
+.wh40k-unit-readonly {
+    cursor: pointer;
+}
+
+.wh40k-roster-detail-pane {
+    animation: wh40k-fade 0.2s ease-out;
+}
+
+.wh40k-readonly-hint {
+    margin-top: 0.4rem;
+    font-size: 0.75rem;
+}
+
+.wh40k-btn-undo:disabled {
+    opacity: 0.35;
+}
+
+.wh40k-side-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.wh40k-unit-card {
+    background: var(--wh40k-bg-elevated);
+    border: 1px solid var(--wh40k-border);
+    border-radius: 4px;
+    padding: 0.7rem;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.15s ease, opacity 0.2s ease;
+    touch-action: pan-y;
+}
+
+.wh40k-unit-card.destroyed {
+    opacity: 0.45;
+    border-color: var(--wh40k-danger);
+}
+
+.wh40k-unit-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+}
+
+.wh40k-unit-actions .wh40k-btn {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.8rem;
+}
+
+.wh40k-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+    animation: wh40k-fade 0.2s ease-out;
+}
+
+@media (min-width: 720px) {
+    .wh40k-modal-backdrop {
+        align-items: center;
+    }
+}
+
+.wh40k-modal {
+    width: min(640px, 100%);
+    max-height: 85vh;
+    overflow: auto;
+    background: var(--wh40k-bg-elevated);
+    border: 1px solid var(--wh40k-border);
+    border-radius: 6px;
+    padding: 1rem;
+    animation: wh40k-fade-up 0.25s ease-out;
+}
+
+.wh40k-modal table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin: 0.5rem 0;
+}
+
+.wh40k-modal th,
+.wh40k-modal td {
+    border-bottom: 1px solid var(--wh40k-border);
+    padding: 0.35rem 0.4rem;
+    text-align: left;
+}
+
+.wh40k-swipe-hint {
+    font-size: 0.75rem;
+    color: var(--wh40k-muted);
+}
+
+@keyframes wh40k-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes wh40k-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.wh40k-countdown {
+    font-family: var(--wh40k-font-display);
+    font-size: clamp(2rem, 8vw, 3.2rem);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--wh40k-warn);
+    animation: wh40k-pulse 1.4s ease-in-out infinite;
+}
+
+.wh40k-invite-card {
+    background: var(--wh40k-bg-elevated);
+    border: 1px solid var(--wh40k-accent);
+    border-radius: 6px;
+    padding: 1rem;
+    margin-top: 0.75rem;
+}
+
+.wh40k-invite-card h3 {
+    margin: 0 0 0.75rem;
+    font-family: var(--wh40k-font-display);
+}
+
+@keyframes wh40k-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.72; }
+}

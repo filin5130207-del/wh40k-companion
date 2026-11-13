@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Players open the standalone PWA; backend OWL client action is retired.
+         pre-migrate 20.0.1.14.0 drops the old ir.actions.client xml id. -->
+    <record id="action_wh40k_companion_app" model="ir.actions.act_url">
+        <field name="name">Battle App</field>
+        <field name="url">/wh40k/app</field>
+        <field name="target">self</field>
+    </record>
+
+    <!-- Same xml id as the former client action so home-action refs keep working. -->
+    <record id="action_wh40k_companion_client" model="ir.actions.act_url">
+        <field name="name">Battle App</field>
+        <field name="url">/wh40k/app</field>
+        <field name="target">self</field>
+    </record>
+</odoo>
