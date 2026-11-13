@@ -41,7 +41,16 @@ function withAppMethods(Base) {
                 }
                 const value = app[name];
                 if (typeof value === "function") {
-                    this[name] = value.bind(app);
+                    // Owl 3 t-ref calls ref.set (or add/delete). Function#bind
+                    // drops those methods, so signal.ref() must be shared as-is.
+                    if (
+                        typeof value.set === "function" ||
+                        (typeof value.add === "function" && typeof value.delete === "function")
+                    ) {
+                        this[name] = value;
+                    } else {
+                        this[name] = value.bind(app);
+                    }
                 }
             }
             // Getters used by templates (ownUnits, qrImageUrl, …)

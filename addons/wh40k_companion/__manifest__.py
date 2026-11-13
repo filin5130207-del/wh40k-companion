@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.17.0",
+    "version": "20.0.1.18.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,11 +11,9 @@ create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
-20.0.1.17.0 highlights:
-- PWA bundle includes Bootstrap _maps.scss so /wh40k/app CSS compiles
-  ($theme-colors-rgb). Standalone assets_pwa does not inherit web.assets_backend.
-- Battle App components use Owl 3 useProps instead of static props.
-- Prior 20.0.1.16.0: automated tests, battle_helpers, ACL, unit lines, local QR.
+20.0.1.18.0 highlights:
+- Roster file input keeps the Owl 3 signal ref (set/add/delete) on child screens.
+- Prior 20.0.1.17.0: PWA CSS maps, Owl 3 useProps/proxy.
 """,
     "author": "WH40k Companion",
     "license": "LGPL-3",
