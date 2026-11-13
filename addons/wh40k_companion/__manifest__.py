@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.18.0",
+    "version": "20.0.1.19.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,9 +11,9 @@ create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
-20.0.1.18.0 highlights:
-- Roster file input keeps the Owl 3 signal ref (set/add/delete) on child screens.
-- Prior 20.0.1.17.0: PWA CSS maps, Owl 3 useProps/proxy.
+20.0.1.19.0 highlights:
+- Join and app navigations are no longer served from the cached shell (that shell was a blank page).
+- Prior 20.0.1.18.0: roster file input keeps the Owl 3 signal ref.
 """,
     "author": "WH40k Companion",
     "license": "LGPL-3",

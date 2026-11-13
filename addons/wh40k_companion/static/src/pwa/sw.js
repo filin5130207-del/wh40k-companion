@@ -1,7 +1,6 @@
-/* WH40k Battle App — offline shell for static assets (not full gameplay). */
-const CACHE = "wh40k-battle-shell-v1";
+/* WH40k Battle App — cache static assets only. Documents stay on the network. */
+const CACHE = "wh40k-battle-shell-v2";
 const PRECACHE = [
-    "/wh40k/app",
     "/wh40k/manifest.webmanifest",
     "/wh40k_companion/static/description/icon.png",
 ];
@@ -27,40 +26,49 @@ self.addEventListener("activate", (event) => {
     );
 });
 
+function isAppDocument(req, url) {
+    // A cached /wh40k/app shell keeps old asset URLs. The next full navigation
+    // (join redirect, refresh, manifest start_url) then paints an empty body.
+    return (
+        req.mode === "navigate" ||
+        url.pathname === "/wh40k/app" ||
+        url.pathname.startsWith("/wh40k/join") ||
+        url.pathname === "/wh40k/sw.js"
+    );
+}
+
 self.addEventListener("fetch", (event) => {
     const req = event.request;
     if (req.method !== "GET") {
         return;
     }
     const url = new URL(req.url);
-    // Never cache JSON-RPC / API — always network.
-    if (url.pathname.startsWith("/wh40k/api/")) {
+    if (url.origin !== self.location.origin) {
         return;
     }
-    // Cache-first for module static assets and manifest/icons.
+    if (url.pathname.startsWith("/wh40k/api/") || isAppDocument(req, url)) {
+        event.respondWith(fetch(req));
+        return;
+    }
     const isStatic =
         url.pathname.startsWith("/wh40k_companion/static/") ||
         url.pathname === "/wh40k/manifest.webmanifest" ||
-        url.pathname === "/wh40k/sw.js" ||
         url.pathname.endsWith(".css") ||
         url.pathname.endsWith(".js") ||
         url.pathname.endsWith(".png") ||
         url.pathname.endsWith(".webmanifest");
-    if (!isStatic && url.pathname !== "/wh40k/app") {
+    if (!isStatic) {
         return;
     }
     event.respondWith(
-        caches.match(req).then((cached) => {
-            const fetched = fetch(req)
-                .then((resp) => {
-                    if (resp && resp.ok && isStatic) {
-                        const clone = resp.clone();
-                        caches.open(CACHE).then((cache) => cache.put(req, clone));
-                    }
-                    return resp;
-                })
-                .catch(() => cached);
-            return cached || fetched;
-        })
+        fetch(req)
+            .then((resp) => {
+                if (resp && resp.ok) {
+                    const clone = resp.clone();
+                    caches.open(CACHE).then((cache) => cache.put(req, clone));
+                }
+                return resp;
+            })
+            .catch(async () => (await caches.match(req)) || Response.error())
     );
 });
