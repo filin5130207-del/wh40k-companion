@@ -17,6 +17,7 @@ import {
     buildWoundDelta,
     applyWoundDelta,
     nextLinesRev,
+    watchMatchGoesHome,
     UNDO_STACK_LIMIT,
 } from "./battle_helpers";
 
@@ -36,6 +37,7 @@ export {
     buildWoundDelta,
     applyWoundDelta,
     nextLinesRev,
+    watchMatchGoesHome,
     UNDO_STACK_LIMIT,
 };
 

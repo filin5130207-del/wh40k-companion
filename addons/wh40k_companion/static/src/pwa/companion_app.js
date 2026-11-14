@@ -18,6 +18,7 @@ import {
     buildWoundDelta,
     applyWoundDelta,
     nextLinesRev,
+    watchMatchGoesHome,
     UNDO_STACK_LIMIT,
 } from "./battle_store";
 import { Wh40kErrorBoundary } from "./error_boundary";
@@ -630,6 +631,11 @@ export class Wh40kCompanionApp extends Component {
                     this.state.match.lines_rev,
                     data.lines_rev
                 );
+            }
+            // A finish must go home even if the body also carries a line delta.
+            if (watchMatchGoesHome(data)) {
+                await onPayload(data.match);
+                return;
             }
             if (data.lines_only && data.delta) {
                 this.state.unitState = applyWoundDelta(this.state.unitState, data.delta);

@@ -71,6 +71,8 @@ class Wh40kMatch(models.Model):
 
     WAITING_TIMEOUT_MINUTES = 15
     BUS_CHANNEL_PREFIX = "wh40k.match"
+    # Postgres NOTIFY channel. Surrender commits, then an in-flight watch wakes.
+    NOTIFY_CHANNEL = "wh40k_match"
 
     def waiting_expires_at(self):
         self.ensure_one()
@@ -132,6 +134,9 @@ class Wh40kMatch(models.Model):
                     Bus._sendone(channel, "wh40k.match/updated", payload)
                 except Exception:  # noqa: BLE001 — bus must never break match writes
                     _logger.debug("WH40k bus notify skipped", exc_info=True)
+            # bus.bus insert is not enough: the other request is blocked in
+            # poll, not reading the table. NOTIFY wakes that poll on commit.
+            match._pg_notify_watchers(payload)
 
     def action_publish(self):
         for match in self:
@@ -736,11 +741,31 @@ class Wh40kMatch(models.Model):
         write_date, _lines_rev = self._db_change_marker()
         return write_date
 
+    def _pg_notify_watchers(self, payload):
+        """Wake in-flight ``wait_for_change`` polls. Delivered on commit."""
+        self.ensure_one()
+        try:
+            self.env.cr.execute(
+                "SELECT pg_notify(%s, %s)",
+                (
+                    self.NOTIFY_CHANNEL,
+                    json.dumps(
+                        {
+                            "match_id": self.id,
+                            "state": payload.get("state"),
+                            "lines_only": bool(payload.get("lines_only")),
+                        }
+                    ),
+                ),
+            )
+        except Exception:  # noqa: BLE001 — notify must not break the match write
+            _logger.debug("WH40k match NOTIFY skipped", exc_info=True)
+
     def _db_change_marker(self):
         """Match write_date (lifecycle) and max line rev (wound deltas)."""
         self.ensure_one()
-        # Raw SQL does not autoflush; line.rev is written through the ORM.
-        self.env["wh40k.match"].flush_model(["write_date", "state"])
+        # Flush line rev only. Flushing match state/write_date from an in-flight
+        # watch would write the cached pre-finish row back over the surrender.
         self.env["wh40k.match.unit.line"].flush_model(["rev"])
         self.env.cr.execute(
             """
@@ -812,8 +837,200 @@ class Wh40kMatch(models.Model):
             ]
         )
 
+    def _read_finish_row(self):
+        """State and winner from this cursor, without flushing a cached row."""
+        self.ensure_one()
+        self.env.cr.execute(
+            "SELECT state, winner_id FROM wh40k_match WHERE id = %s",
+            (self.id,),
+        )
+        row = self.env.cr.fetchone()
+        if not row or row[0] not in ("finished", "cancelled"):
+            return None
+        return {"state": row[0], "winner_id": row[1]}
+
+    def _read_finish_committed(self):
+        """Finish row other requests have committed.
+
+        The extra cursor is rolled back and closed. It must not commit the
+        watcher's transaction. Uncommitted test rows stay invisible here.
+        """
+        self.ensure_one()
+        cr = None
+        try:
+            cr = self.env.registry.cursor()
+            cr.execute(
+                "SELECT state, winner_id FROM wh40k_match WHERE id = %s",
+                (self.id,),
+            )
+            row = cr.fetchone()
+            cr.rollback()
+        except Exception:  # noqa: BLE001 — fall back to this cursor
+            _logger.debug("WH40k watch committed-state read failed", exc_info=True)
+            row = None
+            if cr is not None:
+                try:
+                    cr.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+        finally:
+            if cr is not None:
+                try:
+                    cr.close()
+                except Exception:  # noqa: BLE001
+                    pass
+        if not row or row[0] not in ("finished", "cancelled"):
+            return None
+        return {"state": row[0], "winner_id": row[1]}
+
+    def _terminal_watch_info(self, since_write_date, since_rev, include_committed=False):
+        """Lifecycle result when the match is already finished or cancelled.
+
+        ``write_date`` is second-resolution, so a surrender in the same second
+        does not change it. The state column is the signal. ``lines_only``
+        stays false so the client gets the match and goes home.
+        """
+        seen = self._read_finish_row()
+        if seen is None and include_committed:
+            seen = self._read_finish_committed()
+        if seen is None:
+            return None
+        self._invalidate_tracked_lines()
+        info = self._classify_change(since_write_date, since_rev)
+        info["changed"] = True
+        info["lines_only"] = False
+        info["terminal_state"] = seen["state"]
+        info["terminal_winner_id"] = seen["winner_id"]
+        return info
+
+    def _raw_db_connection(self, cr):
+        for attr in ("_cnx", "connection", "_obj"):
+            conn = getattr(cr, attr, None)
+            if conn is not None and hasattr(conn, "fileno"):
+                return conn
+        return None
+
+    def _consume_notifies(self, conn):
+        if hasattr(conn, "poll"):
+            conn.poll()
+        notifies_attr = getattr(conn, "notifies", None)
+        if notifies_attr is None:
+            return []
+        if callable(notifies_attr):
+            return list(notifies_attr())
+        found = list(notifies_attr)
+        try:
+            notifies_attr.clear()
+        except Exception:  # noqa: BLE001
+            pass
+        return found
+
+    def _notify_is_ours(self, notifies):
+        for notify in notifies:
+            channel = getattr(notify, "channel", None)
+            if channel and channel != self.NOTIFY_CHANNEL:
+                continue
+            payload = getattr(notify, "payload", None)
+            try:
+                data = json.loads(payload or "{}")
+            except (TypeError, json.JSONDecodeError):
+                return True
+            try:
+                if int(data.get("match_id") or 0) == self.id:
+                    return True
+            except (TypeError, ValueError):
+                return True
+        return False
+
+    def _park_for_signal(self, timeout):
+        """Block until this match is notified, or ``timeout`` elapses.
+
+        Return True when a notification arrived or the row is already
+        finished. LISTEN runs on a dedicated autocommit connection: on the
+        request cursor it would stay invisible until that transaction
+        commits, which is after the poll returns. A full-timeout sleep is
+        not used. If LISTEN cannot be set up, recheck after a short slice.
+        """
+        self.ensure_one()
+        timeout = max(0.0, float(timeout))
+        if timeout <= 0:
+            return False
+        try:
+            return bool(self._park_pg_notify(timeout))
+        except Exception:  # noqa: BLE001 — sliced recheck, not the full budget
+            _logger.debug("WH40k watch NOTIFY park failed", exc_info=True)
+            import time
+
+            time.sleep(min(0.25, timeout))
+            return False
+
+    def _park_pg_notify(self, timeout):
+        import select
+
+        cr = self.env.registry.cursor()
+        conn = None
+        raw = None
+        try:
+            conn = self._raw_db_connection(cr)
+            if conn is None:
+                raise RuntimeError("PostgreSQL connection has no fileno")
+            try:
+                cr.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+            if hasattr(conn, "autocommit"):
+                conn.autocommit = True
+            raw = conn.cursor()
+            # Channel name is a module constant. LISTEN does not take binds.
+            raw.execute("LISTEN wh40k_match")
+            if not getattr(conn, "autocommit", False):
+                conn.commit()
+            self._consume_notifies(conn)
+            # Finish may have committed in the gap before LISTEN was active.
+            raw.execute(
+                "SELECT state FROM wh40k_match WHERE id = %s",
+                (self.id,),
+            )
+            row = raw.fetchone()
+            if row and row[0] in ("finished", "cancelled"):
+                return True
+            readable, _w, _x = select.select([conn], [], [], timeout)
+            if not readable:
+                return False
+            return self._notify_is_ours(self._consume_notifies(conn)) or True
+        finally:
+            if raw is not None:
+                try:
+                    raw.execute("UNLISTEN *")
+                    if conn is not None and not getattr(conn, "autocommit", False):
+                        conn.commit()
+                except Exception:  # noqa: BLE001
+                    _logger.debug("WH40k UNLISTEN skipped", exc_info=True)
+                try:
+                    raw.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            if conn is not None and hasattr(conn, "autocommit"):
+                try:
+                    conn.autocommit = False
+                except Exception:  # noqa: BLE001
+                    pass
+            try:
+                cr.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                cr.close()
+            except Exception:  # noqa: BLE001
+                pass
+
     def wait_for_change(self, since_write_date=None, timeout_seconds=20, since_rev=None):
-        """Long-poll until lifecycle write_date or, when asked, line rev changes."""
+        """Long-poll until the match changes.
+
+        A finish or cancel returns as soon as the NOTIFY lands, including
+        when ``write_date`` did not move. The wait is ``select`` on that
+        channel, not a sleep of the whole poll budget.
+        """
         self.ensure_one()
         import time
 
@@ -822,12 +1039,27 @@ class Wh40kMatch(models.Model):
         since_wd = since_write_date or baseline_wd
         deadline = time.time() + timeout_seconds
         while time.time() < deadline:
+            terminal = self._terminal_watch_info(since_wd, since_rev)
+            if terminal:
+                return terminal
             classified = self._classify_change(since_wd, since_rev)
             if classified["changed"]:
                 self._invalidate_tracked_lines()
                 return classified
-            time.sleep(0.75)
-        self.invalidate_recordset()
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            if self._park_for_signal(remaining):
+                terminal = self._terminal_watch_info(
+                    since_wd, since_rev, include_committed=True
+                )
+                if terminal:
+                    return terminal
+        terminal = self._terminal_watch_info(
+            since_wd, since_rev, include_committed=True
+        )
+        if terminal:
+            return terminal
         return self._classify_change(since_wd, since_rev)
 
     def watch_payload(
@@ -839,13 +1071,20 @@ class Wh40kMatch(models.Model):
         base_url=None,
         wait=True,
     ):
-        """Watch DTO. Line-only changes carry a wound delta, not ``match``."""
+        """Watch DTO. Line-only changes carry a wound delta, not ``match``.
+
+        Finished and cancelled matches always include ``match`` so the client
+        goes home, same as a poll that used to discover the finish at timeout.
+        """
         self.ensure_one()
         if self.guest_id:
             self._assert_participant(partner)
         elif not self._partner_is_host(partner):
             raise AccessError("Not a participant of this match.")
-        if wait:
+        terminal = self._terminal_watch_info(since_write_date, since_rev)
+        if terminal:
+            info = terminal
+        elif wait:
             info = self.wait_for_change(
                 since_write_date=since_write_date,
                 since_rev=since_rev,
@@ -865,5 +1104,12 @@ class Wh40kMatch(models.Model):
         if info["lines_only"]:
             payload["delta"] = self.wound_delta_since(info["since_rev"])
             return payload
+        self._invalidate_tracked_lines()
         payload["match"] = self.to_state_dict(partner, base_url=base_url)
+        if info.get("terminal_state") in ("finished", "cancelled"):
+            payload["match"]["state"] = info["terminal_state"]
+            payload["lines_only"] = False
+            winner_id = info.get("terminal_winner_id")
+            if winner_id and not payload["match"].get("winner_id"):
+                payload["match"]["winner_id"] = winner_id
         return payload

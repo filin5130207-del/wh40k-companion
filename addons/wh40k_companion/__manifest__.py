@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.20.0",
+    "version": "20.0.1.21.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,8 +11,9 @@ create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
-20.0.1.20.0 highlights:
-- Wound updates and line-only watch polls return a delta, not the full match.
+20.0.1.21.0 highlights:
+- A finished or cancelled match wakes an in-flight watch immediately. The client goes home from that payload.
+- Prior 20.0.1.20.0: wound updates and line-only watch polls return a delta, not the full match.
 - Roster unit/weapon/ability counts are stored. Import stays in the request and does not reload matches.
 - Prior 20.0.1.19.0: join and app navigations are no longer served from the cached shell.
 """,

@@ -212,6 +212,15 @@ export function nextLinesRev(current, incoming) {
     return safeInc > safeCur ? safeInc : safeCur;
 }
 
+/** Finished or cancelled watch body: leave the game, same as a late poll. */
+export function watchMatchGoesHome(data) {
+    const match = data && data.match;
+    if (!match) {
+        return false;
+    }
+    return match.state === "finished" || match.state === "cancelled";
+}
+
 export function createInitialState(initialJoinToken = "") {
     return {
         screen: "home",

@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from odoo.tests.common import TransactionCase, tagged
 
 from .common import Wh40kPlayerMixin
@@ -122,6 +124,65 @@ class TestWh40kWoundDelta(Wh40kPlayerMixin, TransactionCase):
         self.assertFalse(watched["lines_only"])
         self.assertEqual(watched["match"]["state"], "finished")
         self.assertIn("unit_state", watched["match"])
+
+    def _assert_no_full_poll_sleep(self):
+        def fail_sleep(seconds):
+            if seconds >= 0.5:
+                raise AssertionError(
+                    "watch slept %.3f instead of returning the finish" % seconds
+                )
+
+        return patch("time.sleep", fail_sleep)
+
+    def test_finished_watch_returns_without_parking(self):
+        """Opponent surrender is visible even when write_date did not move."""
+        match = self._active()
+        match.with_user(self.user_b).action_surrender(self.user_b.partner_id)
+        since = match._db_write_date_string()
+        since_rev = match._lines_rev()
+
+        def park(_record, _timeout):
+            raise AssertionError("parked on an already finished match")
+
+        with patch.object(type(match), "_park_for_signal", park), self._assert_no_full_poll_sleep():
+            watched = match.watch_payload(
+                self.user_a.partner_id,
+                since_write_date=since,
+                since_rev=since_rev,
+                timeout_seconds=20,
+                wait=True,
+            )
+        self.assertTrue(watched["changed"])
+        self.assertFalse(watched["lines_only"])
+        self.assertNotIn("delta", watched)
+        self.assertEqual(watched["match"]["state"], "finished")
+        self.assertEqual(watched["match"]["winner_id"], self.user_a.partner_id.id)
+
+    def test_inflight_watch_wakes_on_surrender_without_full_sleep(self):
+        """The long-poll returns the finish from the wake, not after timeout."""
+        match = self._active()
+        since = match._db_write_date_string()
+        since_rev = match._lines_rev()
+        parked = {}
+
+        def park(record, timeout):
+            parked["timeout"] = timeout
+            record.with_user(self.user_a).action_surrender(self.user_a.partner_id)
+            return True
+
+        with patch.object(type(match), "_park_for_signal", park), self._assert_no_full_poll_sleep():
+            watched = match.watch_payload(
+                self.user_b.partner_id,
+                since_write_date=since,
+                since_rev=since_rev,
+                timeout_seconds=20,
+                wait=True,
+            )
+        self.assertGreater(parked["timeout"], 1)
+        self.assertTrue(watched["changed"])
+        self.assertFalse(watched["lines_only"])
+        self.assertEqual(watched["match"]["state"], "finished")
+        self.assertEqual(watched["match"]["winner_id"], self.user_b.partner_id.id)
 
     def test_import_does_not_touch_unrelated_match(self):
         match = self._active()

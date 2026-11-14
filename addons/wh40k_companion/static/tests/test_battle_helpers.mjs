@@ -172,6 +172,22 @@ check("applyWoundDelta merges one line and keeps the other", () => {
     assert.notEqual(next.guest[0], state.guest[0]);
 });
 
+check("watchMatchGoesHome is the finished or cancelled match", () => {
+    assert.equal(mod.watchMatchGoesHome({ match: { state: "finished" } }), true);
+    assert.equal(mod.watchMatchGoesHome({ match: { state: "cancelled" } }), true);
+    assert.equal(
+        mod.watchMatchGoesHome({
+            lines_only: true,
+            delta: { lines: [{}] },
+            match: { state: "finished" },
+        }),
+        true
+    );
+    assert.equal(mod.watchMatchGoesHome({ lines_only: true, delta: { lines: [] } }), false);
+    assert.equal(mod.watchMatchGoesHome({ match: { state: "active" } }), false);
+    assert.equal(mod.watchMatchGoesHome(null), false);
+});
+
 check("nextLinesRev only moves forward", () => {
     assert.equal(mod.nextLinesRev(2, 1), 2);
     assert.equal(mod.nextLinesRev(2, 4), 4);
