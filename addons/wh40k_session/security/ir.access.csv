@@ -1,0 +1,2 @@
+id,name,model_id,group_id/id,operation,domain
+access_wh40k_stat_event_system,wh40k.stat.event settings,wh40k.stat.event,base.group_system,crud,

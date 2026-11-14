@@ -1,0 +1,9 @@
+id,name,model_id,group_id/id,operation,domain
+access_wh40k_rule_system,wh40k.rule settings,wh40k.rule,base.group_system,crud,
+access_wh40k_ability_system,wh40k.ability settings,wh40k.ability,base.group_system,crud,
+access_wh40k_weapon_system,wh40k.weapon settings,wh40k.weapon,base.group_system,crud,
+access_wh40k_model_system,wh40k.model settings,wh40k.model,base.group_system,crud,
+access_wh40k_unit_system,wh40k.unit settings,wh40k.unit,base.group_system,crud,
+access_wh40k_detachment_system,wh40k.detachment settings,wh40k.detachment,base.group_system,crud,
+access_wh40k_force_system,wh40k.force settings,wh40k.force,base.group_system,crud,
+access_wh40k_roster_system,wh40k.roster settings,wh40k.roster,base.group_system,crud,

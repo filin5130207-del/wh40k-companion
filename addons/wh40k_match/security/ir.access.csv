@@ -1,0 +1,4 @@
+id,name,model_id,group_id/id,operation,domain
+access_wh40k_mission_system,wh40k.mission settings,wh40k.mission,base.group_system,crud,
+access_wh40k_match_system,wh40k.match settings,wh40k.match,base.group_system,crud,
+access_wh40k_match_unit_line_system,wh40k.match.unit.line settings,wh40k.match.unit.line,base.group_system,crud,

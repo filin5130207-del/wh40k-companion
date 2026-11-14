@@ -1,0 +1,89 @@
+# Three Odoo processes, three databases, one Postgres.
+# Does not mount the monolith volume and never passes --db-drop.
+# Browser ports: session 8069, roster 8070, match 8071.
+# Inside the network every Odoo listens on 8069.
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+    volumes:
+      - wh40k-services-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  session:
+    image: odoo:20.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8069:8069"
+    environment: &wh40k-env
+      HOST: db
+      USER: odoo
+      PASSWORD: odoo
+      PYTHONPATH: /opt/wh40k
+      PYTHONDONTWRITEBYTECODE: "1"
+      WH40K_TOKEN_SECRET: dev-wh40k-token-secret
+      WH40K_ROSTER_PUBLIC_URL: http://127.0.0.1:8070
+      WH40K_MATCH_PUBLIC_URL: http://127.0.0.1:8071
+      WH40K_ROSTER_PUBLIC_PORT: "8070"
+      WH40K_MATCH_PUBLIC_PORT: "8071"
+      WH40K_PWA_BASE_URL: http://127.0.0.1:8069
+      WH40K_ROSTER_INTERNAL_URL: http://roster:8069
+      WH40K_SESSION_INTERNAL_URL: http://session:8069
+    volumes:
+      - wh40k-session-data:/var/lib/odoo
+      - ./addons/wh40k_session:/mnt/extra-addons/wh40k_session
+      - ./services/wh40k_token:/opt/wh40k/wh40k_token:ro
+      - ./scripts/service_boot.sh:/opt/wh40k/service_boot.sh:ro
+    entrypoint: ["bash", "/opt/wh40k/service_boot.sh", "wh40k_session", "wh40k_session"]
+
+  roster:
+    image: odoo:20.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8070:8069"
+    environment:
+      <<: *wh40k-env
+    volumes:
+      - wh40k-roster-data:/var/lib/odoo
+      - ./addons/wh40k_roster:/mnt/extra-addons/wh40k_roster
+      - ./services/wh40k_token:/opt/wh40k/wh40k_token:ro
+      - ./scripts/service_boot.sh:/opt/wh40k/service_boot.sh:ro
+    entrypoint: ["bash", "/opt/wh40k/service_boot.sh", "wh40k_roster", "wh40k_roster"]
+
+  match:
+    image: odoo:20.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8071:8069"
+    environment:
+      <<: *wh40k-env
+    volumes:
+      - wh40k-match-data:/var/lib/odoo
+      - ./addons/wh40k_match:/mnt/extra-addons/wh40k_match
+      - ./services/wh40k_token:/opt/wh40k/wh40k_token:ro
+      - ./scripts/service_boot.sh:/opt/wh40k/service_boot.sh:ro
+    entrypoint: ["bash", "/opt/wh40k/service_boot.sh", "wh40k_match", "wh40k_match"]
+
+volumes:
+  wh40k-services-pg:
+  wh40k-session-data:
+  wh40k-roster-data:
+  wh40k-match-data:
