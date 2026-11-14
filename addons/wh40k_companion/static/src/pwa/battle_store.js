@@ -14,6 +14,10 @@ import {
     popUndoEntry,
     applyUnitFieldDelta,
     destroyUnitInPlace,
+    buildWoundDelta,
+    applyWoundDelta,
+    nextLinesRev,
+    watchMatchGoesHome,
     UNDO_STACK_LIMIT,
 } from "./battle_helpers";
 
@@ -30,6 +34,10 @@ export {
     popUndoEntry,
     applyUnitFieldDelta,
     destroyUnitInPlace,
+    buildWoundDelta,
+    applyWoundDelta,
+    nextLinesRev,
+    watchMatchGoesHome,
     UNDO_STACK_LIMIT,
 };
 

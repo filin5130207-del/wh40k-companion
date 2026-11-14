@@ -15,10 +15,15 @@ class TestWh40kRosterModel(Wh40kPlayerMixin, TransactionCase):
         roster = self._import_minimal(self.user_a, name="Count Army", points=150)
         self.assertEqual(roster.partner_id, self.user_a.partner_id)
         self.assertEqual(roster.points_used, 150)
+        count_field = self.env["wh40k.roster"]._fields["weapon_count"]
+        self.assertTrue(count_field.store)
+        self.assertTrue(self.env["wh40k.roster"]._fields["unit_count"].store)
+        self.assertTrue(self.env["wh40k.roster"]._fields["ability_count"].store)
+        self.assertTrue(any("weapon_ids" in dep for dep in count_field.depends))
         self.assertGreaterEqual(roster.unit_count, 1)
         self.assertGreaterEqual(roster.weapon_count, 1)
         self.assertGreaterEqual(roster.ability_count, 1)
-        # Adding a model weapon bumps computed weapon_count via @api.depends.
+        # Adding a model weapon bumps the stored count via @api.depends.
         unit = roster.force_ids.detachment_ids.unit_ids[:1]
         model = unit.model_ids[:1]
         before = roster.weapon_count
@@ -29,7 +34,6 @@ class TestWh40kRosterModel(Wh40kPlayerMixin, TransactionCase):
                 "weapon_type": "melee",
             }
         )
-        roster.invalidate_recordset(["weapon_count", "unit_count", "ability_count"])
         self.assertEqual(roster.weapon_count, before + 1)
 
     def test_owner_acl_blocks_other_player(self):

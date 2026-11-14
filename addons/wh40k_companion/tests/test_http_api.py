@@ -164,6 +164,44 @@ class TestWh40kHttpApi(HttpCase):
         self.assertTrue(watched.get("ok"), watched)
         self.assertIn("changed", watched)
 
+        self.authenticate(self.user_b.login, self.password)
+        guest_line = unit_state["guest"][0]
+        updated = self._jsonrpc(
+            "/wh40k/api/match/unit_state",
+            {
+                "match_id": match_id,
+                "unit_delta": {
+                    "line_id": guest_line["line_id"],
+                    "unit_id": guest_line["unit_id"],
+                    "side": "guest",
+                    "models_remaining": 0,
+                    "wounds_remaining": 0,
+                    "destroyed": True,
+                    "undo": [],
+                },
+            },
+        )
+        self.assertTrue(updated.get("ok"), updated)
+        self.assertTrue(updated.get("lines_only"))
+        self.assertNotIn("match", updated)
+        self.assertEqual(len(updated["delta"]["lines"]), 1)
+        self.assertNotIn("weapons", updated["delta"]["lines"][0])
+
+        self.authenticate(self.user_a.login, self.password)
+        watched_delta = self._jsonrpc(
+            "/wh40k/api/match/watch",
+            {
+                "match_id": match_id,
+                "since": state["match"].get("write_date"),
+                "since_rev": 0,
+                "timeout": 5,
+            },
+        )
+        self.assertTrue(watched_delta.get("ok"), watched_delta)
+        self.assertTrue(watched_delta.get("lines_only"))
+        self.assertNotIn("match", watched_delta)
+        self.assertTrue(watched_delta["delta"]["lines"][0]["destroyed"])
+
         surrendered = self._jsonrpc(
             "/wh40k/api/match/surrender", {"match_id": match_id}
         )
