@@ -17,13 +17,15 @@ class Wh40kRoster(models.Model):
         string="Owner",
         required=True,
         default=lambda self: self.env.user.partner_id,
-        index=True,
+        index=True,  # dashboard roster list filters on owner
         ondelete="cascade",
     )
     force_ids = fields.One2many("wh40k.force", "roster_id", string="Forces")
-    unit_count = fields.Integer(compute="_compute_counts")
-    weapon_count = fields.Integer(compute="_compute_counts")
-    ability_count = fields.Integer(compute="_compute_counts")
+    # Stored so list/dashboard reads the columns. Depends stay on the tree so a
+    # weapon/unit edit recomputes only the affected rosters, not every match.
+    unit_count = fields.Integer(compute="_compute_counts", store=True)
+    weapon_count = fields.Integer(compute="_compute_counts", store=True)
+    ability_count = fields.Integer(compute="_compute_counts", store=True)
 
     @api.depends(
         "force_ids.detachment_ids.unit_ids",
@@ -33,6 +35,12 @@ class Wh40kRoster(models.Model):
         "force_ids.detachment_ids.unit_ids.model_ids.ability_ids",
     )
     def _compute_counts(self):
+        """Recompute only ``self`` when the tree changes.
+
+        Dashboard and roster list read the stored columns and do not call
+        this method. The depends paths are the unit/model/weapon/ability
+        lines, not match state, so a wound update does not recompute counts.
+        """
         for roster in self:
             units = roster.force_ids.mapped("detachment_ids.unit_ids")
             models_rs = units.mapped("model_ids")
@@ -201,37 +209,35 @@ class Wh40kRoster(models.Model):
         }
 
     @api.model
+    def _create_owned_rules(self, rules, owner_id):
+        """Batch-insert rules inside the current request. Does not touch matches."""
+        rules = rules or []
+        if not rules:
+            return []
+        created = self.env["wh40k.rule"].create(
+            [
+                {
+                    "name": rule["name"],
+                    "description": rule.get("description"),
+                    "external_id": rule.get("external_id"),
+                    "owner_partner_id": owner_id,
+                }
+                for rule in rules
+            ]
+        )
+        return created.ids
+
+    @api.model
     def _force_commands_from_parsed(self, parsed, owner_partner=None):
         """Build One2many create commands for forces from BattlescribeParser.parse()."""
-        Rule = self.env["wh40k.rule"]
         owner_id = owner_partner.id if owner_partner else self.env.user.partner_id.id
         force_cmds = []
         for force in parsed.get("forces") or []:
-            army_rule_ids = []
-            for rule in force.get("army_rules") or []:
-                rec = Rule.create(
-                    {
-                        "name": rule["name"],
-                        "description": rule.get("description"),
-                        "external_id": rule.get("external_id"),
-                        "owner_partner_id": owner_id,
-                    }
-                )
-                army_rule_ids.append(rec.id)
+            army_rule_ids = self._create_owned_rules(force.get("army_rules"), owner_id)
 
             det_cmds = []
             for det in force.get("detachments") or []:
-                det_rule_ids = []
-                for rule in det.get("rules") or []:
-                    rec = Rule.create(
-                        {
-                            "name": rule["name"],
-                            "description": rule.get("description"),
-                            "external_id": rule.get("external_id"),
-                            "owner_partner_id": owner_id,
-                        }
-                    )
-                    det_rule_ids.append(rec.id)
+                det_rule_ids = self._create_owned_rules(det.get("rules"), owner_id)
 
                 unit_cmds = []
                 for unit in det.get("units") or []:
@@ -346,13 +352,26 @@ class Wh40kRoster(models.Model):
 
     @api.model
     def action_import_parsed(self, partner, parsed):
-        """Create a roster (and nested lines) from BattlescribeParser.parse() output."""
+        """Create a roster from BattlescribeParser.parse() in this request.
+
+        Import stays on the caller's cursor (no cron, no second transaction).
+        Mail tracking is off so follower/message writes do not flush the env,
+        and this method never searches or invalidates ``wh40k.match``.
+        """
         if not partner:
             raise UserError("Missing partner for roster import.")
         if not parsed or not parsed.get("name"):
             raise UserError("Invalid parsed roster payload.")
-        force_cmds = self._force_commands_from_parsed(parsed, owner_partner=partner)
-        return self.create(
+        roster_model = self.with_context(
+            tracking_disable=True,
+            mail_notrack=True,
+            mail_create_nosubscribe=True,
+            mail_create_nolog=True,
+        )
+        force_cmds = roster_model._force_commands_from_parsed(
+            parsed, owner_partner=partner
+        )
+        return roster_model.create(
             {
                 "name": parsed["name"],
                 "game_system": parsed.get("game_system"),

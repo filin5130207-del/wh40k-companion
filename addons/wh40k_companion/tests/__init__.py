@@ -7,3 +7,5 @@ from . import test_security_and_stats
 from . import test_http_api
 from . import test_pwa_assets
 from . import test_qr_png
+from . import test_wound_delta
+from . import test_perf_bench

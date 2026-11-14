@@ -133,6 +133,51 @@ check("destroyUnitInPlace", () => {
     assert.equal(unit.wounds_remaining, 0);
 });
 
+check("buildWoundDelta is one line, not both armies", () => {
+    const unit = {
+        line_id: 4,
+        unit_id: 9,
+        side: "host",
+        models_remaining: 2,
+        wounds_remaining: 1,
+        destroyed: false,
+    };
+    const delta = mod.buildWoundDelta(unit, { "9": [{ wounds_remaining: 2 }] });
+    assert.equal(delta.line_id, 4);
+    assert.equal(delta.wounds_remaining, 1);
+    assert.equal(delta.undo.length, 1);
+    assert.equal(delta.host, undefined);
+    assert.equal(delta.guest, undefined);
+});
+
+check("applyWoundDelta merges one line and keeps the other", () => {
+    const state = {
+        host: [
+            { line_id: 1, unit_id: 10, side: "host", wounds_remaining: 3, destroyed: false },
+        ],
+        guest: [
+            { line_id: 2, unit_id: 11, side: "guest", wounds_remaining: 5, destroyed: false },
+        ],
+        undo: {},
+    };
+    const next = mod.applyWoundDelta(state, {
+        lines: [
+            { line_id: 2, unit_id: 11, side: "guest", wounds_remaining: 4, destroyed: false },
+        ],
+        undo: { "11": [{ wounds_remaining: 5 }] },
+    });
+    assert.equal(next.host[0].wounds_remaining, 3);
+    assert.equal(next.guest[0].wounds_remaining, 4);
+    assert.equal(next.undo["11"].length, 1);
+    assert.notEqual(next.guest[0], state.guest[0]);
+});
+
+check("nextLinesRev only moves forward", () => {
+    assert.equal(mod.nextLinesRev(2, 1), 2);
+    assert.equal(mod.nextLinesRev(2, 4), 4);
+    assert.equal(mod.nextLinesRev(undefined, 1), 1);
+});
+
 check("rememberJoinToken / clear", () => {
     const mem = new Map();
     const storage = {

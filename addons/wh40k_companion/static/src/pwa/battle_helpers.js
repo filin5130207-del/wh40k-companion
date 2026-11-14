@@ -155,6 +155,63 @@ export function destroyUnitInPlace(unit) {
     return unit;
 }
 
+/** One changed line for /match/unit_state. Not the full host/guest lists. */
+export function buildWoundDelta(unit, undoMap) {
+    const key = String(unit.unit_id);
+    const stack = (undoMap || {})[key] || [];
+    return {
+        line_id: unit.line_id,
+        unit_id: unit.unit_id,
+        side: unit.side,
+        models_remaining: unit.models_remaining,
+        wounds_remaining: unit.wounds_remaining,
+        destroyed: !!unit.destroyed,
+        undo: stack,
+    };
+}
+
+/**
+ * Merge a server wound delta into local unit state.
+ * Lines absent from the delta are left as they are (optimistic edits stay).
+ */
+export function applyWoundDelta(unitState, delta) {
+    const source = unitState || { host: [], guest: [], undo: {} };
+    const next = {
+        host: (source.host || []).map((unit) => ({ ...unit })),
+        guest: (source.guest || []).map((unit) => ({ ...unit })),
+        undo: { ...(source.undo || {}) },
+    };
+    const undo = (delta && delta.undo) || {};
+    Object.keys(undo).forEach((key) => {
+        next.undo[String(key)] = undo[key];
+    });
+    (delta && delta.lines ? delta.lines : []).forEach((entry) => {
+        const bucket = entry.side === "guest" ? "guest" : "host";
+        const idx = next[bucket].findIndex(
+            (unit) =>
+                (entry.line_id && unit.line_id === entry.line_id) ||
+                (entry.unit_id && unit.unit_id === entry.unit_id)
+        );
+        const cleaned = { ...entry };
+        delete cleaned.undo;
+        if (idx >= 0) {
+            next[bucket][idx] = { ...next[bucket][idx], ...cleaned };
+        } else {
+            next[bucket].push(cleaned);
+        }
+    });
+    return next;
+}
+
+/** Watch/POST revisions only move forward so a late poll cannot rewind. */
+export function nextLinesRev(current, incoming) {
+    const cur = Number(current);
+    const inc = Number(incoming);
+    const safeCur = Number.isFinite(cur) ? cur : 0;
+    const safeInc = Number.isFinite(inc) ? inc : 0;
+    return safeInc > safeCur ? safeInc : safeCur;
+}
+
 export function createInitialState(initialJoinToken = "") {
     return {
         screen: "home",

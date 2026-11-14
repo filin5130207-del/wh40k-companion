@@ -24,6 +24,11 @@ class Wh40kMatchUnitLine(models.Model):
         required=True,
         index=True,
     )
+    # Monotonic per match. Watch uses (match_id, rev) to return changed lines only.
+    rev = fields.Integer(default=0)
+    # Own-side updates filter (match_id, side); delta reads filter (match_id, rev).
+    _match_side_idx = models.Index("(match_id, side)")
+    _match_rev_idx = models.Index("(match_id, rev)")
     name = fields.Char(required=True)
     models = fields.Integer(string="Models", default=1)
     models_remaining = fields.Integer(string="Models Remaining", default=1)
@@ -72,8 +77,8 @@ class Wh40kMatchUnitLine(models.Model):
             return
         raise AccessError("You can only update your own army lines.")
 
-    def action_apply_snapshot(self, values, undo_stack=None):
-        """Update tracking fields from a client snapshot (own side)."""
+    def action_apply_snapshot(self, values, undo_stack=None, rev=None):
+        """Update tracking fields from a client snapshot (own side). One write."""
         self.ensure_one()
         if self.match_id.state != "active":
             raise UserError("Unit state can only be updated during an active match.")
@@ -88,7 +93,10 @@ class Wh40kMatchUnitLine(models.Model):
             vals["destroyed"] = True
             vals["models_remaining"] = 0
             vals["wounds_remaining"] = 0
-        self.write(vals)
         if undo_stack is not None:
-            self.set_undo_list(undo_stack)
+            stack = undo_stack if isinstance(undo_stack, list) else []
+            vals["undo_stack"] = json.dumps(stack[-20:])
+        if rev is not None:
+            vals["rev"] = int(rev)
+        self.write(vals)
         return True

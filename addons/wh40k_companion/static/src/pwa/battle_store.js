@@ -14,6 +14,9 @@ import {
     popUndoEntry,
     applyUnitFieldDelta,
     destroyUnitInPlace,
+    buildWoundDelta,
+    applyWoundDelta,
+    nextLinesRev,
     UNDO_STACK_LIMIT,
 } from "./battle_helpers";
 
@@ -30,6 +33,9 @@ export {
     popUndoEntry,
     applyUnitFieldDelta,
     destroyUnitInPlace,
+    buildWoundDelta,
+    applyWoundDelta,
+    nextLinesRev,
     UNDO_STACK_LIMIT,
 };
 

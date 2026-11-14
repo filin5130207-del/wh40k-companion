@@ -331,14 +331,31 @@ class Wh40kCompanionController(http.Controller):
             match=match.to_state_dict(partner, base_url=self._public_base_url())
         )
 
-    def _api_match_unit_state(self, match_id=None, unit_state=None, **kwargs):
+    def _api_match_unit_state(
+        self, match_id=None, unit_state=None, unit_delta=None, **kwargs
+    ):
         partner = self._partner()
         match = request.env["wh40k.match"].browse(int(match_id))
         if not match.exists():
             raise UserError("Match not found.")
         match._assert_participant(partner)
-        match.action_update_unit_state(unit_state, updating_partner=partner)
-        return self._ok()
+        if unit_delta:
+            result = match.action_apply_wound_delta(
+                unit_delta, updating_partner=partner
+            )
+        else:
+            result = match.action_update_unit_state(
+                unit_state, updating_partner=partner
+            )
+        if not isinstance(result, dict):
+            result = {}
+        # Wound updates return the changed lines only — never the roster or match.
+        return self._ok(
+            lines_only=True,
+            lines_rev=result.get("lines_rev"),
+            write_date=result.get("write_date"),
+            delta=result.get("delta") or {"lines": [], "undo": {}},
+        )
 
     def _api_match_surrender(self, match_id=None, **kwargs):
         partner = self._partner()
@@ -361,20 +378,32 @@ class Wh40kCompanionController(http.Controller):
         match.action_cancel(reason=cancel_reason)
         return self._ok(state=match.state, cancel_reason=match.cancel_reason or "")
 
-    def _api_match_watch(self, match_id=None, since=None, timeout=20, **kwargs):
-        """Long-poll match changes (server-driven updates without blind 5s spam)."""
+    def _api_match_watch(
+        self, match_id=None, since=None, timeout=20, since_rev=None, **kwargs
+    ):
+        """Long-poll match changes.
+
+        When ``since_rev`` is sent and only unit lines moved, the body is a
+        wound delta. Lifecycle changes still include the full match.
+        """
         partner = self._partner()
         match = request.env["wh40k.match"].browse(int(match_id))
         if not match.exists():
             raise UserError("Match not found.")
-        changed, write_date = match.wait_for_change(
-            since_write_date=since, timeout_seconds=timeout
+        if since_rev is not None:
+            try:
+                since_rev = int(since_rev)
+            except (TypeError, ValueError):
+                since_rev = 0
+        payload = match.watch_payload(
+            partner,
+            since_write_date=since,
+            since_rev=since_rev,
+            timeout_seconds=timeout,
+            base_url=self._public_base_url(),
+            wait=True,
         )
-        return self._ok(
-            changed=bool(changed),
-            write_date=write_date,
-            match=match.to_state_dict(partner, base_url=self._public_base_url()),
-        )
+        return self._ok(**payload)
 
     def _api_roster_detail(self, roster_id, **kwargs):
         partner = self._partner()
@@ -457,11 +486,14 @@ class Wh40kCompanionController(http.Controller):
     @http.route(
         "/wh40k/api/match/unit_state", type="jsonrpc", auth="user", methods=["POST"]
     )
-    def api_match_unit_state(self, match_id=None, unit_state=None, **kwargs):
+    def api_match_unit_state(
+        self, match_id=None, unit_state=None, unit_delta=None, **kwargs
+    ):
         return self._wrap(
             self._api_match_unit_state,
             match_id=match_id,
             unit_state=unit_state,
+            unit_delta=unit_delta,
             **kwargs,
         )
 
@@ -476,12 +508,15 @@ class Wh40kCompanionController(http.Controller):
         )
 
     @http.route("/wh40k/api/match/watch", type="jsonrpc", auth="user")
-    def api_match_watch(self, match_id=None, since=None, timeout=20, **kwargs):
+    def api_match_watch(
+        self, match_id=None, since=None, timeout=20, since_rev=None, **kwargs
+    ):
         return self._wrap(
             self._api_match_watch,
             match_id=match_id,
             since=since,
             timeout=timeout,
+            since_rev=since_rev,
             **kwargs,
         )
 
@@ -549,9 +584,14 @@ class Wh40kCompanionController(http.Controller):
         return self.api_match_state(match_id=match_id, **kwargs)
 
     @http.route("/wh40k/match/unit_state", type="jsonrpc", auth="user", methods=["POST"])
-    def match_unit_state(self, match_id=None, unit_state=None, **kwargs):
+    def match_unit_state(
+        self, match_id=None, unit_state=None, unit_delta=None, **kwargs
+    ):
         return self.api_match_unit_state(
-            match_id=match_id, unit_state=unit_state, **kwargs
+            match_id=match_id,
+            unit_state=unit_state,
+            unit_delta=unit_delta,
+            **kwargs,
         )
 
     @http.route("/wh40k/match/surrender", type="jsonrpc", auth="user")
@@ -563,9 +603,15 @@ class Wh40kCompanionController(http.Controller):
         return self.api_match_cancel(match_id=match_id, reason=reason, **kwargs)
 
     @http.route("/wh40k/match/watch", type="jsonrpc", auth="user")
-    def match_watch(self, match_id=None, since=None, timeout=20, **kwargs):
+    def match_watch(
+        self, match_id=None, since=None, timeout=20, since_rev=None, **kwargs
+    ):
         return self.api_match_watch(
-            match_id=match_id, since=since, timeout=timeout, **kwargs
+            match_id=match_id,
+            since=since,
+            timeout=timeout,
+            since_rev=since_rev,
+            **kwargs,
         )
 
     @http.route("/wh40k/roster/<int:roster_id>/detail", type="jsonrpc", auth="user")

@@ -15,6 +15,9 @@ import {
     popUndoEntry,
     applyUnitFieldDelta,
     destroyUnitInPlace,
+    buildWoundDelta,
+    applyWoundDelta,
+    nextLinesRev,
     UNDO_STACK_LIMIT,
 } from "./battle_store";
 import { Wh40kErrorBoundary } from "./error_boundary";
@@ -600,11 +603,16 @@ export class Wh40kCompanionApp extends Component {
 
     async watchMatch(matchId, since, onPayload) {
         try {
-            const data = await this.rpc(`${API}/match/watch`, {
+            const params = {
                 match_id: matchId,
                 since: since || null,
                 timeout: 20,
-            });
+            };
+            // since_rev asks for a line delta. Omit it on the waiting screen.
+            if (this.state.match && this.state.match.id === matchId) {
+                params.since_rev = this.state.match.lines_rev || 0;
+            }
+            const data = await this.rpc(`${API}/match/watch`, params);
             if (data.write_date) {
                 if (this.state.screen === "waiting" && this.state.waiting.match_id === matchId) {
                     this.state.waiting.write_date = data.write_date;
@@ -613,7 +621,27 @@ export class Wh40kCompanionApp extends Component {
                     this.state.match.write_date = data.write_date;
                 }
             }
+            if (
+                data.lines_rev != null &&
+                this.state.match &&
+                this.state.match.id === matchId
+            ) {
+                this.state.match.lines_rev = nextLinesRev(
+                    this.state.match.lines_rev,
+                    data.lines_rev
+                );
+            }
+            if (data.lines_only && data.delta) {
+                this.state.unitState = applyWoundDelta(this.state.unitState, data.delta);
+                return;
+            }
             if (data.match) {
+                if (data.match.lines_rev != null && this.state.match && this.state.match.id === matchId) {
+                    this.state.match.lines_rev = nextLinesRev(
+                        this.state.match.lines_rev,
+                        data.match.lines_rev
+                    );
+                }
                 await onPayload(data.match);
             }
         } catch (_e) {
@@ -1062,15 +1090,21 @@ export class Wh40kCompanionApp extends Component {
         }
     }
 
-    async persistUnitState() {
-        await this.rpc(`${API}/match/unit_state`, {
+    async persistWoundDelta(unit) {
+        const delta = buildWoundDelta(unit, this.state.unitState.undo);
+        const data = await this.rpc(`${API}/match/unit_state`, {
             match_id: this.state.match.id,
-            unit_state: {
-                host: this.state.unitState.host || [],
-                guest: this.state.unitState.guest || [],
-                undo: this.state.unitState.undo || {},
-            },
+            unit_delta: delta,
         });
+        if (data && data.delta) {
+            this.state.unitState = applyWoundDelta(this.state.unitState, data.delta);
+        }
+        if (data && data.lines_rev != null && this.state.match) {
+            this.state.match.lines_rev = nextLinesRev(
+                this.state.match.lines_rev,
+                data.lines_rev
+            );
+        }
     }
 
     async adjustUnit(unit, field, delta) {
@@ -1083,7 +1117,7 @@ export class Wh40kCompanionApp extends Component {
         }
         this.state.unitState = this._cloneUnitState();
         try {
-            await this.persistUnitState();
+            await this.persistWoundDelta(unit);
         } catch (e) {
             this.setError(e.message);
         }
@@ -1098,7 +1132,7 @@ export class Wh40kCompanionApp extends Component {
         this.vibrate();
         this.state.unitState = this._cloneUnitState();
         try {
-            await this.persistUnitState();
+            await this.persistWoundDelta(unit);
         } catch (e) {
             this.setError(e.message);
         }
@@ -1124,7 +1158,7 @@ export class Wh40kCompanionApp extends Component {
             undo,
         };
         try {
-            await this.persistUnitState();
+            await this.persistWoundDelta(unit);
         } catch (e) {
             this.setError(e.message);
         }
