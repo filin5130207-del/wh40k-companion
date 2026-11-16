@@ -31,6 +31,8 @@ bash scripts/odpm_up.sh
 cd /home/odoo/wh40k-odpm && docker compose up -d
 ```
 
+`odpm_up.bat` / `odpm_up.sh` start `scripts/odpm_keepalive.ps1` first: one hidden `wsl.exe`. Without that session, WSL powers Debian off as soon as the one-shot command exits (`systemd-logind: The system will power off now!`) and Docker stops. The Postgres data directory is not deleted. To stop the machine later: `wsl --terminate Debian`.
+
 **Upgrade module after code sync (still no drop):**
 
 ```bash

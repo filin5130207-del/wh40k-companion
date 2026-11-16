@@ -4,6 +4,14 @@
 # Also strips baked-in -i/-u from compose so restarts do not reinstall modules.
 set -euo pipefail
 
+# WSL powers Debian off when the last wsl.exe client exits
+# (systemd-logind: "The system will power off now!"), which stops dockerd.
+# Hold one hidden wsl.exe so a one-shot odpm_up.bat can exit and containers stay up.
+KEEPALIVE_PS="$(cd "$(dirname "$0")" && pwd)/odpm_keepalive.ps1"
+if [[ -f "$KEEPALIVE_PS" ]] && command -v powershell.exe >/dev/null 2>&1; then
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$KEEPALIVE_PS")"
+fi
+
 ODPM_DIR="${ODPM_DIR:-/home/odoo/wh40k-odpm}"
 cd "$ODPM_DIR"
 
