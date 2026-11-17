@@ -18,6 +18,14 @@ import {
     applyWoundDelta,
     nextLinesRev,
     watchMatchGoesHome,
+    matchBusChannel,
+    busWebsocketUrl,
+    busSubscribeFrame,
+    parseBusFrame,
+    parseBusNotifications,
+    shouldPollWatch,
+    joinLinkIsPublic,
+    busJoinShouldEnter,
     UNDO_STACK_LIMIT,
 } from "./battle_helpers";
 
@@ -38,6 +46,14 @@ export {
     applyWoundDelta,
     nextLinesRev,
     watchMatchGoesHome,
+    matchBusChannel,
+    busWebsocketUrl,
+    busSubscribeFrame,
+    parseBusFrame,
+    parseBusNotifications,
+    shouldPollWatch,
+    joinLinkIsPublic,
+    busJoinShouldEnter,
     UNDO_STACK_LIMIT,
 };
 

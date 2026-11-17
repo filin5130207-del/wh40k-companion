@@ -188,6 +188,91 @@ check("watchMatchGoesHome is the finished or cancelled match", () => {
     assert.equal(mod.watchMatchGoesHome(null), false);
 });
 
+check("bus frame keeps match updates and ignores other types", () => {
+    const raw = JSON.stringify([
+        {
+            id: 3,
+            message: {
+                type: "wh40k.match/updated",
+                payload: { match_id: 9, state: "finished", lines_only: false },
+            },
+        },
+        { id: 4, message: { type: "mail.record/insert", payload: { id: 1 } } },
+        { internal: true, type: "bus/last_id_reset", payload: 8 },
+    ]);
+    const frame = mod.parseBusFrame(raw);
+    assert.equal(frame.lastIdReset, 8);
+    assert.equal(frame.notifications.length, 1);
+    const payloads = mod.parseBusNotifications(raw);
+    assert.equal(payloads.length, 1);
+    assert.equal(payloads[0].match_id, 9);
+    assert.equal(payloads[0].state, "finished");
+    assert.equal(mod.parseBusNotifications("not-json").length, 0);
+    assert.equal(mod.parseBusNotifications({}).length, 0);
+});
+
+check("subscribe frame targets wh40k.match.<partner> on this origin", () => {
+    const frame = mod.busSubscribeFrame(42, 7);
+    assert.equal(frame.event_name, "subscribe");
+    assert.deepEqual(frame.data.channels, ["wh40k.match.42"]);
+    assert.equal(frame.data.last, 7);
+    assert.equal(frame.data.check_outdated, false);
+    const url = mod.busWebsocketUrl(
+        { protocol: "https:", host: "example.com" },
+        "saas-19.5-1"
+    );
+    assert.equal(url, "wss://example.com/websocket?version=saas-19.5-1");
+});
+
+check("watch is the fallback when the bus socket is down", () => {
+    assert.equal(mod.shouldPollWatch({ busConnected: false }), true);
+    assert.equal(mod.shouldPollWatch({ busConnected: true }), false);
+    assert.equal(mod.shouldPollWatch(undefined), true);
+    assert.equal(mod.shouldPollWatch({}), true);
+});
+
+check("an active bus join leaves the waiting screen without a long-poll", () => {
+    assert.equal(
+        mod.busJoinShouldEnter(
+            { match_id: 4, state: "active", lines_only: false },
+            4
+        ),
+        true
+    );
+    assert.equal(
+        mod.busJoinShouldEnter(
+            { match_id: 4, state: "selecting", lines_only: false },
+            4
+        ),
+        false
+    );
+    assert.equal(
+        mod.busJoinShouldEnter(
+            { match_id: 4, state: "active", lines_only: true },
+            4
+        ),
+        false
+    );
+    assert.equal(
+        mod.busJoinShouldEnter(
+            { match_id: 9, state: "active", lines_only: false },
+            4
+        ),
+        false
+    );
+    assert.equal(mod.busJoinShouldEnter(null, 4), false);
+});
+
+check("a join link is public only when the server says so", () => {
+    const state = mod.createInitialState();
+    assert.equal(state.waiting.join_url_public, false);
+    assert.equal(mod.joinLinkIsPublic(state.waiting), false);
+    assert.equal(mod.joinLinkIsPublic({ join_url_public: false }), false);
+    assert.equal(mod.joinLinkIsPublic({ join_url: "http://192.168.0.163:8069/wh40k/join/x" }), false);
+    assert.equal(mod.joinLinkIsPublic({ join_url_public: true }), true);
+    assert.equal(mod.joinLinkIsPublic(null), false);
+});
+
 check("nextLinesRev only moves forward", () => {
     assert.equal(mod.nextLinesRev(2, 1), 2);
     assert.equal(mod.nextLinesRev(2, 4), 4);

@@ -285,6 +285,8 @@
         <h2>Ожидание противника...</h2>
         <div class="wh40k-countdown" t-out="this.countdownLabel"/>
         <p class="wh40k-muted">QR действует 15 минут. После таймаута матч отменится автоматически.</p>
+        <p t-if="this.joinLinkIsPublic" class="wh40k-muted">Ссылка открывается и с другой сети.</p>
+        <p t-else="" class="wh40k-muted">Ссылка и QR работают только в этой локальной сети. С другого Wi-Fi или мобильного интернета они не откроются.</p>
         <img t-att-src="this.qrImageUrl" alt="Match QR code"/>
         <code t-out="this.state.waiting.join_url"/>
         <div class="wh40k-row">

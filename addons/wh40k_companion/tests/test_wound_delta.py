@@ -184,6 +184,33 @@ class TestWh40kWoundDelta(Wh40kPlayerMixin, TransactionCase):
         self.assertEqual(watched["match"]["state"], "finished")
         self.assertEqual(watched["match"]["winner_id"], self.user_b.partner_id.id)
 
+    def test_inflight_watch_returns_join_without_full_sleep(self):
+        """A guest join ends the host long-poll. It does not wait out the timeout."""
+        host = self._make_tiny_roster(self.user_a, name="Wake Host")
+        guest = self._make_tiny_roster(self.user_b, name="Wake Guest")
+        match = self._publish_match(self.user_a, host)
+        since = match._db_write_date_string()
+        parked = {}
+
+        def park(record, timeout):
+            parked["timeout"] = timeout
+            record.with_user(self.user_b).action_accept_invite(self.user_b.partner_id)
+            record.with_user(self.user_b).action_join(self.user_b.partner_id, guest)
+            return True
+
+        with patch.object(type(match), "_park_for_signal", park), self._assert_no_full_poll_sleep():
+            watched = match.watch_payload(
+                self.user_a.partner_id,
+                since_write_date=since,
+                timeout_seconds=20,
+                wait=True,
+            )
+        self.assertGreater(parked["timeout"], 1)
+        self.assertTrue(watched["changed"])
+        self.assertFalse(watched["lines_only"])
+        self.assertEqual(watched["match"]["state"], "active")
+        self.assertEqual(watched["match"]["id"], match.id)
+
     def test_import_does_not_touch_unrelated_match(self):
         match = self._active()
         self.env.flush_all()

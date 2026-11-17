@@ -19,8 +19,12 @@ import {
     applyWoundDelta,
     nextLinesRev,
     watchMatchGoesHome,
+    shouldPollWatch,
+    joinLinkIsPublic,
+    busJoinShouldEnter,
     UNDO_STACK_LIMIT,
 } from "./battle_store";
+import { createMatchBus } from "./bus_client";
 import { Wh40kErrorBoundary } from "./error_boundary";
 import {
     NicknameGate,
@@ -62,6 +66,11 @@ export class Wh40kCompanionApp extends Component {
         this._countdown = null;
         this._finishingMatch = false;
         this._waitingTimeoutHandled = false;
+        this._bus = null;
+        this._busConnected = false;
+        this._busRefreshing = false;
+        this._busPending = null;
+        this._enteringMatchId = null;
 
         onWillStart(async () => {
             await this.loadDashboard();
@@ -77,12 +86,18 @@ export class Wh40kCompanionApp extends Component {
 
         onMounted(() => {
             this._watchLoop = true;
+            this.startMatchBus();
             this.runWatchLoop();
             this._countdown = setInterval(() => this.tickCountdown(), 1000);
         });
 
         onWillUnmount(() => {
             this._watchLoop = false;
+            if (this._bus) {
+                this._bus.stop();
+                this._bus = null;
+            }
+            this._busConnected = false;
             if (this._countdown) {
                 clearInterval(this._countdown);
             }
@@ -131,6 +146,10 @@ export class Wh40kCompanionApp extends Component {
             parts.push(`${am.points} pts`);
         }
         return parts.join(" · ") || "Матч ещё идёт";
+    }
+
+    get joinLinkIsPublic() {
+        return joinLinkIsPublic(this.state.waiting);
     }
 
     get qrImageUrl() {
@@ -488,6 +507,7 @@ export class Wh40kCompanionApp extends Component {
             this.state.waiting = {
                 match_id: published.match_id,
                 join_url: published.join_url,
+                join_url_public: published.join_url_public === true,
                 match_token: published.match_token,
                 published_at: published.published_at,
                 expires_at: published.expires_at,
@@ -507,6 +527,7 @@ export class Wh40kCompanionApp extends Component {
         this.state.waiting = {
             match_id: null,
             join_url: "",
+            join_url_public: false,
             match_token: "",
             published_at: null,
             expires_at: null,
@@ -565,8 +586,86 @@ export class Wh40kCompanionApp extends Component {
         }
     }
 
+    startMatchBus() {
+        const partnerId = this.state.player && this.state.player.id;
+        if (!partnerId) {
+            this._busConnected = false;
+            return;
+        }
+        const shell = typeof window !== "undefined" ? window.odoo || {} : {};
+        this._bus = createMatchBus({
+            partnerId,
+            lastId: shell.wh40k_bus_last_id,
+            version: shell.wh40k_bus_version || "",
+            onConnection: (connected) => {
+                this._busConnected = connected;
+            },
+            onNotification: (payload) => {
+                this.onMatchBusNotification(payload);
+            },
+        });
+    }
+
+    _busTargetsOpenMatch(payload) {
+        if (!payload || payload.match_id == null) {
+            return false;
+        }
+        const matchId = payload.match_id;
+        if (this.state.screen === "waiting" && this.state.waiting.match_id === matchId) {
+            return true;
+        }
+        return !!(
+            this.state.screen === "game" &&
+            this.state.match &&
+            this.state.match.id === matchId
+        );
+    }
+
+    async onMatchBusNotification(payload) {
+        if (!this._busTargetsOpenMatch(payload)) {
+            return;
+        }
+        // Keep the latest payload. A join must not be dropped behind a refresh.
+        this._busPending = payload;
+        if (this._busRefreshing) {
+            return;
+        }
+        this._busRefreshing = true;
+        try {
+            while (this._busPending && this._watchLoop) {
+                const next = this._busPending;
+                this._busPending = null;
+                if (
+                    this.state.screen === "waiting" &&
+                    busJoinShouldEnter(next, this.state.waiting.match_id)
+                ) {
+                    // /match/state, not the long-poll. The row is already committed.
+                    try {
+                        await this.enterGame(next.match_id);
+                        continue;
+                    } catch (_enter) {
+                        // State route missed the row. Short watch is the fallback.
+                    }
+                }
+                if (!this._busTargetsOpenMatch(next)) {
+                    continue;
+                }
+                await this.pollMatchLifecycle(1);
+            }
+        } catch (_e) {
+            // The watch loop retries if the socket drops.
+        } finally {
+            this._busRefreshing = false;
+        }
+    }
+
     async runWatchLoop() {
         while (this._watchLoop) {
+            // The socket is the live path. Watch stays for a failed or dropped bus.
+            if (!shouldPollWatch({ busConnected: this._busConnected })) {
+                await new Promise((r) => setTimeout(r, 500));
+                continue;
+            }
             try {
                 await this.pollMatchLifecycle();
             } catch (_e) {
@@ -584,12 +683,13 @@ export class Wh40kCompanionApp extends Component {
         }
     }
 
-    async pollMatchLifecycle() {
+    async pollMatchLifecycle(timeout) {
         if (this.state.screen === "waiting" && this.state.waiting.match_id) {
             await this.watchMatch(
                 this.state.waiting.match_id,
                 this.state.waiting.write_date,
-                (match) => this.applyWaitingWatch(match)
+                (match) => this.applyWaitingWatch(match),
+                timeout
             );
             return;
         }
@@ -597,17 +697,18 @@ export class Wh40kCompanionApp extends Component {
             await this.watchMatch(
                 this.state.match.id,
                 this.state.match.write_date,
-                (match) => this.applyActiveWatch(match)
+                (match) => this.applyActiveWatch(match),
+                timeout
             );
         }
     }
 
-    async watchMatch(matchId, since, onPayload) {
+    async watchMatch(matchId, since, onPayload, timeout) {
         try {
             const params = {
                 match_id: matchId,
                 since: since || null,
-                timeout: 20,
+                timeout: timeout || 20,
             };
             // since_rev asks for a line delta. Omit it on the waiting screen.
             if (this.state.match && this.state.match.id === matchId) {
@@ -909,6 +1010,27 @@ export class Wh40kCompanionApp extends Component {
     }
 
     async enterGame(matchId) {
+        if (this._enteringMatchId === matchId) {
+            return;
+        }
+        if (
+            this.state.screen === "game" &&
+            this.state.match &&
+            this.state.match.id === matchId
+        ) {
+            return;
+        }
+        this._enteringMatchId = matchId;
+        try {
+            await this._loadGame(matchId);
+        } finally {
+            if (this._enteringMatchId === matchId) {
+                this._enteringMatchId = null;
+            }
+        }
+    }
+
+    async _loadGame(matchId) {
         const data = await this.rpc(`${API}/match/state`, { match_id: matchId });
         if (data.match.state !== "active") {
             this.state.activeMatch = null;

@@ -9,3 +9,4 @@ from . import test_pwa_assets
 from . import test_qr_png
 from . import test_wound_delta
 from . import test_perf_bench
+from . import test_bus_and_public_url

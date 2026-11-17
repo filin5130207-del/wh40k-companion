@@ -39,8 +39,37 @@ class Wh40kCompanionController(http.Controller):
         data.update(payload)
         return data
 
+    def _request_origin(self):
+        """Origin of this request, used only as a same-LAN join fallback."""
+        return (request.httprequest.url_root or "").rstrip("/")
+
+    def _bus_shell_values(self):
+        """Worker version and last bus id for the PWA websocket client.
+
+        The version must match ``WebsocketConnectionHandler._VERSION`` or
+        Odoo closes the browser socket as outdated. ``last`` skips history
+        that was already committed before this page render.
+        """
+        version = ""
+        last_id = 0
+        try:
+            from odoo.addons.bus.websocket import WebsocketConnectionHandler
+
+            version = WebsocketConnectionHandler._VERSION or ""
+        except Exception:
+            _logger.debug("WH40k bus worker version unavailable", exc_info=True)
+        try:
+            last_id = int(request.env["bus.bus"].sudo()._bus_last_id() or 0)
+        except Exception:
+            _logger.debug("WH40k bus last id unavailable", exc_info=True)
+            last_id = 0
+        return {
+            "bus_worker_version_json": json.dumps(version),
+            "bus_last_id": last_id,
+        }
+
     def _public_base_url(self):
-        """Prefer a non-loopback host so QR/join links work on LAN phones."""
+        """Origin for the manifest icons. Join links use ``resolve_join_base``."""
         icp = request.env["ir.config_parameter"].sudo()
         configured = (icp.get_str("web.base.url") or "").rstrip("/")
         host_url = (request.httprequest.url_root or "").rstrip("/")
@@ -71,10 +100,12 @@ class Wh40kCompanionController(http.Controller):
         return BattlescribeParser(data)
 
     def _pwa_render_values(self):
-        return {
+        values = {
             "session_info": request.env["ir.http"].get_frontend_session_info(),
             "debug": request.session.debug if hasattr(request.session, "debug") else "",
         }
+        values.update(self._bus_shell_values())
+        return values
 
     # ------------------------------------------------------------ public pages
     @http.route("/wh40k", type="http", auth="public", website=False, sitemap=False)
@@ -290,7 +321,7 @@ class Wh40kCompanionController(http.Controller):
         if not match.exists() or match.host_id.id != partner.id:
             raise UserError("Match not found.")
         match.action_publish()
-        return self._ok(**match.to_publish_dict(base_url=self._public_base_url()))
+        return self._ok(**match.to_publish_dict(request_host=self._request_origin()))
 
     def _api_match_verify(self, match_token=None, **kwargs):
         match = request.env["wh40k.match"].find_by_token(match_token)
@@ -328,7 +359,7 @@ class Wh40kCompanionController(http.Controller):
         if not match.exists():
             raise UserError("Match not found.")
         return self._ok(
-            match=match.to_state_dict(partner, base_url=self._public_base_url())
+            match=match.to_state_dict(partner, request_host=self._request_origin())
         )
 
     def _api_match_unit_state(
@@ -400,7 +431,7 @@ class Wh40kCompanionController(http.Controller):
             since_write_date=since,
             since_rev=since_rev,
             timeout_seconds=timeout,
-            base_url=self._public_base_url(),
+            request_host=self._request_origin(),
             wait=True,
         )
         return self._ok(**payload)

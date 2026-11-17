@@ -44,6 +44,30 @@ Important: `odpm -d wh40k -i|-u wh40k_companion` rewrites `docker-compose.yml` s
 
 Never use `docker compose down -v` or `docker volume rm wh40k-odpm_postgres-data` for a normal restart.
 
+## Bus websocket (`/websocket`)
+
+The Battle App subscribes to `wh40k.match.<partner_id>` on the Odoo bus. The endpoint is `/websocket` on the **same origin and port** as the rest of Odoo. There is no second port for phones.
+
+Odoo 20 serves that route from the process that owns the HTTP port when `workers = 0` (threaded server). That is the current single-process command:
+
+- This repo's `docker-compose.yml` runs one `odoo` process and mounts `config/odoo.conf`, which sets `workers = 0`.
+- ODPM's usual command is `odoo -d wh40k` (no `--workers`). The threaded server handles `/websocket` on `8069`.
+
+Check after startup:
+
+```bash
+curl -s http://127.0.0.1:8069/websocket/health
+# {"status": "pass"}
+```
+
+Do **not** add `--workers` greater than 0 to the compose command or to the ODPM service command. In prefork mode the HTTP workers cannot hold the socket; the gevent bus listens on `gevent_port` (default **8072**), and a browser that opens `http://<host>:8069/websocket` fails the upgrade. Enabling that mode requires a reverse proxy on the public port:
+
+- `/websocket` → `gevent_port` (8072)
+- every other path → `http_port` (8069)
+- `proxy_mode = True`
+
+Keep `8072` off the public interface. Players keep using one URL. For this app, leaving `workers = 0` is the setup that already serves `/websocket`.
+
 ## First-time install
 
 ```bash

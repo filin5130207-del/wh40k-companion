@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.21.0",
+    "version": "20.0.1.23.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,8 +11,12 @@ create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
-20.0.1.21.0 highlights:
-- A finished or cancelled match wakes an in-flight watch immediately. The client goes home from that payload.
+20.0.1.23.0 highlights:
+- A guest join pushes wh40k.match/updated on wh40k.match.<host partner id> immediately. The host leaves the waiting screen from that socket and does not wait for the /match/watch long-poll. The long-poll still returns as soon as the join commits when the socket is down.
+20.0.1.22.0 highlights:
+- The Battle App subscribes to the Odoo bus channel wh40k.match.<partner_id> on /websocket. Surrender, wounds, and match finish update the other device from that socket. /wh40k/api/match/watch stays as the fallback when the socket fails, and a finish still wakes an in-flight watch.
+- Join and QR links use the system parameter wh40k.public_base_url. web.base.url is used only when it is not a loopback or private address. A private link is labeled as LAN-only.
+- Prior 20.0.1.21.0: a finished or cancelled match wakes an in-flight watch immediately. The client goes home from that payload.
 - Prior 20.0.1.20.0: wound updates and line-only watch polls return a delta, not the full match.
 - Roster unit/weapon/ability counts are stored. Import stays in the request and does not reload matches.
 - Prior 20.0.1.19.0: join and app navigations are no longer served from the cached shell.

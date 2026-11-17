@@ -32,6 +32,9 @@ services:
       - wh40k-odoo-web:/var/lib/odoo
       - ./addons:/mnt/extra-addons
       - ./config/odoo.conf:/etc/odoo/odoo.conf:ro
+    # Single process, workers=0 from config/odoo.conf. That threaded server
+    # serves /websocket on 8069. Do not add --workers here: prefork moves the
+    # bus to gevent_port 8072 and the PWA would need a proxy to keep one origin.
     command: >
       odoo
       --db_host=db

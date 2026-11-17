@@ -6,6 +6,8 @@ from datetime import timedelta
 from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
 
+from ..utils.public_url import is_loopback_base, is_private_base
+
 _logger = logging.getLogger(__name__)
 
 
@@ -71,6 +73,8 @@ class Wh40kMatch(models.Model):
 
     WAITING_TIMEOUT_MINUTES = 15
     BUS_CHANNEL_PREFIX = "wh40k.match"
+    # System parameter. Public origin for QR and join links (no trailing slash).
+    PUBLIC_BASE_PARAM = "wh40k.public_base_url"
     # Postgres NOTIFY channel. Surrender commits, then an in-flight watch wakes.
     NOTIFY_CHANNEL = "wh40k_match"
 
@@ -162,12 +166,53 @@ class Wh40kMatch(models.Model):
         self.write(vals)
         return True
 
-    def get_join_url(self, base_url=None):
-        self.ensure_one()
-        # Config parameter is global; sudo is intentional and read-only.
+    @api.model
+    def resolve_join_base(self, base_url=None, request_host=None):
+        """Origin for a join link, and whether it is safe to call public.
+
+        ``wh40k.public_base_url`` wins. ``web.base.url`` is the public fallback
+        only when it is not loopback or RFC1918. A remaining private origin is
+        still returned so a same-LAN QR works, with ``is_public`` false.
+        """
+        if base_url:
+            base = str(base_url).strip().rstrip("/")
+            return {
+                "base": base,
+                "is_public": bool(base) and not is_private_base(base),
+            }
+        # Config parameters are global; sudo is intentional and read-only.
         icp = self.env["ir.config_parameter"].sudo()
-        base = (base_url or icp.get_str("web.base.url") or "").rstrip("/")
-        return f"{base}/wh40k/join/{self.match_token}"
+        configured = (icp.get_str(self.PUBLIC_BASE_PARAM) or "").strip().rstrip("/")
+        web_base = (icp.get_str("web.base.url") or "").strip().rstrip("/")
+        request_host = (request_host or "").strip().rstrip("/")
+        if configured:
+            base = configured
+        elif web_base and not is_private_base(web_base):
+            base = web_base
+        elif web_base and not is_loopback_base(web_base):
+            base = web_base
+        elif request_host and not is_loopback_base(request_host):
+            base = request_host
+        else:
+            base = web_base or request_host
+        return {
+            "base": base,
+            "is_public": bool(base) and not is_private_base(base),
+        }
+
+    def join_link_dict(self, base_url=None, request_host=None):
+        self.ensure_one()
+        resolved = self.resolve_join_base(base_url=base_url, request_host=request_host)
+        base = resolved["base"]
+        path = f"/wh40k/join/{self.match_token}"
+        return {
+            "join_url": f"{base}{path}" if base else path,
+            "join_url_public": bool(resolved["is_public"]),
+        }
+
+    def get_join_url(self, base_url=None, request_host=None):
+        self.ensure_one()
+        return self.join_link_dict(base_url=base_url, request_host=request_host)["join_url"]
 
     def _roster_fits_points(self, roster):
         self.ensure_one()
@@ -580,14 +625,16 @@ class Wh40kMatch(models.Model):
             }
         )
 
-    def to_publish_dict(self, base_url=None):
+    def to_publish_dict(self, base_url=None, request_host=None):
         self.ensure_one()
         expires_at = self.waiting_expires_at()
+        link = self.join_link_dict(base_url=base_url, request_host=request_host)
         return {
             "match_id": self.id,
             "state": self.state,
             "match_token": self.match_token,
-            "join_url": self.get_join_url(base_url=base_url),
+            "join_url": link["join_url"],
+            "join_url_public": link["join_url_public"],
             "published_at": fields.Datetime.to_string(self.published_at)
             if self.published_at
             else None,
@@ -654,7 +701,7 @@ class Wh40kMatch(models.Model):
             "rosters": [r.to_eligible_dict() for r in rosters],
         }
 
-    def to_state_dict(self, partner, base_url=None):
+    def to_state_dict(self, partner, base_url=None, request_host=None):
         self.ensure_one()
         if self.guest_id:
             self._assert_participant(partner)
@@ -673,14 +720,18 @@ class Wh40kMatch(models.Model):
                 unit_state = {"host": [], "guest": [], "undo": {}}
 
         expires_at = self.waiting_expires_at()
+        link = (
+            self.join_link_dict(base_url=base_url, request_host=request_host)
+            if self.state == "waiting"
+            else None
+        )
         return {
             "id": self.id,
             "state": self.state,
             "points": self.points,
             "match_token": self.match_token if self.state == "waiting" else None,
-            "join_url": self.get_join_url(base_url=base_url)
-            if self.state == "waiting"
-            else None,
+            "join_url": link["join_url"] if link else None,
+            "join_url_public": link["join_url_public"] if link else False,
             "published_at": fields.Datetime.to_string(self.published_at)
             if self.published_at
             else None,
@@ -883,6 +934,69 @@ class Wh40kMatch(models.Model):
             return None
         return {"state": row[0], "winner_id": row[1]}
 
+    def _read_state_row(self):
+        """State from this cursor, without flushing a cached match row."""
+        self.ensure_one()
+        self.env.cr.execute(
+            "SELECT state FROM wh40k_match WHERE id = %s",
+            (self.id,),
+        )
+        row = self.env.cr.fetchone()
+        return row[0] if row else None
+
+    def _read_state_committed(self):
+        """State other requests have committed. Does not commit this one."""
+        self.ensure_one()
+        cr = None
+        row = None
+        try:
+            cr = self.env.registry.cursor()
+            cr.execute(
+                "SELECT state FROM wh40k_match WHERE id = %s",
+                (self.id,),
+            )
+            row = cr.fetchone()
+            cr.rollback()
+        except Exception:  # noqa: BLE001 — fall back to this cursor
+            _logger.debug("WH40k watch committed-state read failed", exc_info=True)
+            row = None
+            if cr is not None:
+                try:
+                    cr.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+        finally:
+            if cr is not None:
+                try:
+                    cr.close()
+                except Exception:  # noqa: BLE001
+                    pass
+        return row[0] if row else None
+
+    def _nonterminal_lifecycle_info(self, since_write_date, since_rev, seen_state):
+        """Join that ``write_date`` did not show. ``seen_state`` is pre-park.
+
+        A guest join leaves ``waiting`` for ``active``. That must end the
+        long-poll the same way a finish does, not burn the rest of the timeout.
+        """
+        if not seen_state:
+            return None
+        state = self._read_state_row()
+        if not state or state == seen_state:
+            state = self._read_state_committed() or state
+        if not state or state == seen_state:
+            return None
+        if state in ("finished", "cancelled"):
+            return self._terminal_watch_info(
+                since_write_date, since_rev, include_committed=True
+            )
+        self._invalidate_tracked_lines()
+        info = self._classify_change(since_write_date, since_rev)
+        info["changed"] = True
+        info["lines_only"] = False
+        info["committed_state"] = state
+        return info
+
     def _terminal_watch_info(self, since_write_date, since_rev, include_committed=False):
         """Lifecycle result when the match is already finished or cancelled.
 
@@ -986,13 +1100,18 @@ class Wh40kMatch(models.Model):
             if not getattr(conn, "autocommit", False):
                 conn.commit()
             self._consume_notifies(conn)
-            # Finish may have committed in the gap before LISTEN was active.
+            # Finish or join may have committed in the gap before LISTEN.
+            # Compare with this request's view: a join moves waiting → active
+            # even when write_date stays in the same second.
+            seen_state = self._read_state_row()
             raw.execute(
                 "SELECT state FROM wh40k_match WHERE id = %s",
                 (self.id,),
             )
             row = raw.fetchone()
             if row and row[0] in ("finished", "cancelled"):
+                return True
+            if row and seen_state and row[0] != seen_state:
                 return True
             readable, _w, _x = select.select([conn], [], [], timeout)
             if not readable:
@@ -1049,12 +1168,20 @@ class Wh40kMatch(models.Model):
             remaining = deadline - time.time()
             if remaining <= 0:
                 break
+            seen_state = self._read_state_row()
             if self._park_for_signal(remaining):
                 terminal = self._terminal_watch_info(
                     since_wd, since_rev, include_committed=True
                 )
                 if terminal:
                     return terminal
+                # Join wakes the same NOTIFY as surrender. Do not park again
+                # until the long-poll budget just because the match is not finished.
+                moved = self._nonterminal_lifecycle_info(
+                    since_wd, since_rev, seen_state
+                )
+                if moved:
+                    return moved
         terminal = self._terminal_watch_info(
             since_wd, since_rev, include_committed=True
         )
@@ -1069,6 +1196,7 @@ class Wh40kMatch(models.Model):
         since_rev=None,
         timeout_seconds=20,
         base_url=None,
+        request_host=None,
         wait=True,
     ):
         """Watch DTO. Line-only changes carry a wound delta, not ``match``.
@@ -1105,11 +1233,16 @@ class Wh40kMatch(models.Model):
             payload["delta"] = self.wound_delta_since(info["since_rev"])
             return payload
         self._invalidate_tracked_lines()
-        payload["match"] = self.to_state_dict(partner, base_url=base_url)
+        payload["match"] = self.to_state_dict(
+            partner, base_url=base_url, request_host=request_host
+        )
         if info.get("terminal_state") in ("finished", "cancelled"):
             payload["match"]["state"] = info["terminal_state"]
             payload["lines_only"] = False
             winner_id = info.get("terminal_winner_id")
             if winner_id and not payload["match"].get("winner_id"):
                 payload["match"]["winner_id"] = winner_id
+        elif info.get("committed_state"):
+            payload["match"]["state"] = info["committed_state"]
+            payload["lines_only"] = False
         return payload

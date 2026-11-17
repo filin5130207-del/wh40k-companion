@@ -221,6 +221,118 @@ export function watchMatchGoesHome(data) {
     return match.state === "finished" || match.state === "cancelled";
 }
 
+/** Odoo bus notification type written by ``wh40k.match._notify_match_changed``. */
+export const MATCH_BUS_TYPE = "wh40k.match/updated";
+
+/** Channel the PWA subscribes to: ``wh40k.match.<partner_id>``. */
+export function matchBusChannel(partnerId) {
+    return `wh40k.match.${partnerId}`;
+}
+
+/**
+ * Same-origin Odoo gevent bus. ``version`` is the server worker version;
+ * a mismatch makes Odoo close the socket.
+ */
+export function busWebsocketUrl(loc, version) {
+    const scope = loc || (typeof location !== "undefined" ? location : null);
+    const protocol = scope && scope.protocol === "https:" ? "wss:" : "ws:";
+    const host = (scope && scope.host) || "localhost";
+    const base = `${protocol}//${host}/websocket`;
+    if (!version) {
+        return base;
+    }
+    return `${base}?version=${encodeURIComponent(version)}`;
+}
+
+/** ``subscribe`` frame for the Odoo 20 bus websocket. */
+export function busSubscribeFrame(partnerId, last = 0) {
+    const lastId = Number.isInteger(last) ? last : 0;
+    return {
+        event_name: "subscribe",
+        data: {
+            channels: [matchBusChannel(partnerId)],
+            last: lastId,
+            check_outdated: false,
+        },
+    };
+}
+
+/**
+ * Parse one websocket text frame.
+ *
+ * Odoo sends a JSON array of ``{id, message: {type, payload}}``. Internal
+ * worker messages (``bus/last_id_reset``) are not match updates.
+ */
+export function parseBusFrame(data) {
+    let parsed;
+    try {
+        parsed = typeof data === "string" ? JSON.parse(data) : data;
+    } catch (_e) {
+        return { notifications: [], lastIdReset: null };
+    }
+    if (!Array.isArray(parsed)) {
+        return { notifications: [], lastIdReset: null };
+    }
+    const notifications = [];
+    let lastIdReset = null;
+    for (const item of parsed) {
+        if (!item || typeof item !== "object") {
+            continue;
+        }
+        if (item.internal) {
+            if (item.type === "bus/last_id_reset" && Number.isInteger(item.payload)) {
+                lastIdReset = item.payload;
+            }
+            continue;
+        }
+        const message = item.message;
+        if (!message || message.type !== MATCH_BUS_TYPE) {
+            continue;
+        }
+        const payload = message.payload;
+        if (!payload || payload.match_id == null) {
+            continue;
+        }
+        notifications.push({ id: item.id, payload });
+    }
+    return { notifications, lastIdReset };
+}
+
+/** Match payloads from one bus frame. Other bus types are ignored. */
+export function parseBusNotifications(data) {
+    return parseBusFrame(data).notifications.map((item) => item.payload);
+}
+
+/**
+ * Long-poll ``/match/watch`` only while the bus socket is down.
+ * A live socket delivers surrender, wounds, and finish on its own.
+ */
+export function shouldPollWatch(busState) {
+    return !(busState && busState.busConnected);
+}
+
+/** The waiting screen may call a link public only when the server says so. */
+export function joinLinkIsPublic(waiting) {
+    return !!(waiting && waiting.join_url_public === true);
+}
+
+/**
+ * Guest join on the host's bus channel: leave the QR screen now.
+ * Do not wait for ``/match/watch`` to finish its long-poll.
+ */
+export function busJoinShouldEnter(payload, waitingMatchId) {
+    if (!payload || payload.lines_only) {
+        return false;
+    }
+    if (payload.state !== "active") {
+        return false;
+    }
+    if (waitingMatchId == null || payload.match_id == null) {
+        return false;
+    }
+    return Number(payload.match_id) === Number(waitingMatchId);
+}
+
 export function createInitialState(initialJoinToken = "") {
     return {
         screen: "home",
@@ -247,6 +359,7 @@ export function createInitialState(initialJoinToken = "") {
         waiting: {
             match_id: null,
             join_url: "",
+            join_url_public: false,
             match_token: "",
             published_at: null,
             expires_at: null,

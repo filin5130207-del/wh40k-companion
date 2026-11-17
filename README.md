@@ -7,7 +7,8 @@ Odoo **20** module `wh40k_companion`: import NewRecruit/Battlescribe JSON roster
 - Odoo 20 + PostgreSQL via Docker Compose
 - Standalone Battle App PWA at `/wh40k/app` + thin `@http.route` JSON API under `/wh40k/api/`
 - **ODPM** (`odpm.json`) for the Odoo package/module workflow
-- Match updates via `/wh40k/api/match/watch` long-poll + `bus.bus` notify (standalone PWA; offline S7 still out of scope)
+- Match updates via the Odoo bus websocket (`/websocket`, channel `wh40k.match.<partner_id>`). `/wh40k/api/match/watch` stays as the fallback when the socket fails, and a finish still wakes an in-flight watch. Offline S7 is still out of scope
+- Join / QR links use system parameter `wh40k.public_base_url` (a tunnel or a real host). `web.base.url` is used only when it is not loopback or a private address. A private link is shown as LAN-only
 
 ## Quick start (Docker Compose)
 
@@ -53,6 +54,21 @@ odpm -d wh40k -u wh40k_companion   # later upgrades — do not use --db-drop
 ```
 
 Use `odpm --db-drop` only when you intentionally wipe the database. Details: [docs/odpm.md](docs/odpm.md).
+
+### Bus websocket
+
+With `workers = 0` (the default in `config/odoo.conf`, and the single `odoo` process in `docker-compose.yml`) Odoo serves `/websocket` on port **8069**. The Battle App uses that same origin. Check:
+
+```bash
+curl -s http://127.0.0.1:8069/websocket/health
+# {"status": "pass"}
+```
+
+Do not set `--workers` above 0 unless a reverse proxy on the public port forwards paths starting with `/websocket` to `gevent_port` (8072) and every other path to `http_port`. Players should not open 8072. See [docs/odpm.md](docs/odpm.md).
+
+### Public join links
+
+Set system parameter `wh40k.public_base_url` to the public origin (scheme, host, optional port, no trailing slash), for example the URL printed by a Cloudflare tunnel or ngrok. Leave it empty only when `web.base.url` is already a public host. A LAN address is still encoded in the QR for same-Wi-Fi play, and the waiting screen says that link works only on this LAN. `scripts/lan_tcp_proxy.py` stays an optional same-Wi-Fi helper.
 
 See [aayartsev/odpm](https://github.com/aayartsev/odpm) for full developer/server/CI scenarios.
 
