@@ -55,6 +55,17 @@ class Wh40kMatch(models.Model):
         index=True,
     )
     winner_id = fields.Many2one("res.partner", string="Winner")
+    # Terminal kind. Win and loss are the two sides of a finished match with a winner.
+    result = fields.Selection(
+        [
+            ("win", "Win"),
+            ("surrender", "Surrender"),
+            ("loss", "Loss"),
+            ("draw", "Draw"),
+        ],
+        string="Result",
+        copy=False,
+    )
     mission_id = fields.Many2one("wh40k.mission", string="Mission")
     unit_line_ids = fields.One2many(
         "wh40k.match.unit.line",
@@ -538,6 +549,7 @@ class Wh40kMatch(models.Model):
         self.write(
             {
                 "state": "finished",
+                "result": "surrender",
                 "winner_id": winner.id,
                 "finished_at": fields.Datetime.now(),
             }
@@ -546,6 +558,98 @@ class Wh40kMatch(models.Model):
         winner.sudo().action_wh40k_record_result(won=True)
         loser.sudo().action_wh40k_record_result(won=False)
         return True
+
+    def action_draw(self, partner):
+        """Either participant records a draw for this match.
+
+        Both players' draw counters move. A player cannot record a draw on
+        someone else's match.
+        """
+        self.ensure_one()
+        self._assert_participant(partner)
+        if self.state != "active":
+            raise UserError("Only active matches can be recorded as a draw.")
+        if not self.guest_id or not self.host_id:
+            raise UserError("Both players must be in the match to record a draw.")
+        self.write(
+            {
+                "state": "finished",
+                "result": "draw",
+                "winner_id": False,
+                "finished_at": fields.Datetime.now(),
+            }
+        )
+        self.host_id.sudo().action_wh40k_record_result(outcome="draw")
+        self.guest_id.sudo().action_wh40k_record_result(outcome="draw")
+        return True
+
+    # Datasheet columns the opponent card already shows. Own units use the same keys.
+    UNIT_PROFILE_FIELDS = ("M", "T", "Sv", "W", "LD", "OC", "InSv")
+
+    def _unit_profiles_by_id(self):
+        """Characteristic rows for every line in this match.
+
+        Opponent models sit outside the caller's roster rules. Call only after
+        the participant check. The read is sudo; the check is not.
+        """
+        self.ensure_one()
+        self.env.cr.execute(
+            """
+            SELECT DISTINCT unit_id
+              FROM wh40k_match_unit_line
+             WHERE match_id = %s
+               AND unit_id IS NOT NULL
+            """,
+            (self.id,),
+        )
+        unit_ids = [row[0] for row in self.env.cr.fetchall()]
+        grouped = {unit_id: [] for unit_id in unit_ids}
+        if not unit_ids:
+            return grouped
+        units = self.env["wh40k.unit"].sudo().browse(unit_ids)
+        units.mapped("model_ids")
+        for unit in units:
+            grouped[unit.id] = [
+                {
+                    "id": model.id,
+                    "name": model.name or "",
+                    "quantity": model.quantity or 1,
+                    "M": model.movement or "",
+                    "T": model.toughness or "",
+                    "Sv": model.save or "",
+                    "W": model.wounds or "",
+                    "LD": model.leadership or "",
+                    "OC": model.objective_control or "",
+                    "InSv": model.invuln_save or "",
+                }
+                for model in unit.model_ids
+            ]
+        return grouped
+
+    def _attach_unit_profiles(self, unit_state):
+        """Copy the same characteristic fields onto host and guest lines."""
+        profiles = self._unit_profiles_by_id()
+        for side in ("host", "guest"):
+            for entry in unit_state.get(side) or []:
+                if not isinstance(entry, dict):
+                    continue
+                entry["profiles"] = list(profiles.get(entry.get("unit_id")) or [])
+        return unit_state
+
+    def you_result_for(self, partner):
+        """This player's outcome: win, surrender, loss, or draw."""
+        self.ensure_one()
+        if self.result == "draw" or (
+            self.state == "finished" and not self.winner_id and self.result == "draw"
+        ):
+            return "draw"
+        if self.state != "finished" or not self.winner_id or not partner:
+            return ""
+        if self.winner_id.id == partner.id:
+            return "win"
+        if self.result == "surrender":
+            return "surrender"
+        return "loss"
 
     @api.model
     def cron_cancel_stale_waiting(self):
@@ -718,6 +822,9 @@ class Wh40kMatch(models.Model):
                 unit_state = json.loads(self.unit_state or "{}")
             except json.JSONDecodeError:
                 unit_state = {"host": [], "guest": [], "undo": {}}
+        if not isinstance(unit_state, dict):
+            unit_state = {"host": [], "guest": [], "undo": {}}
+        self._attach_unit_profiles(unit_state)
 
         expires_at = self.waiting_expires_at()
         link = (
@@ -765,6 +872,8 @@ class Wh40kMatch(models.Model):
                 if self.winner_id
                 else ""
             ),
+            "result": self.result or "",
+            "you_result": self.you_result_for(partner),
             "unit_state": unit_state,
             "lines_rev": self._lines_rev(),
             "is_host": self.host_id.id == partner.id,
@@ -776,15 +885,33 @@ class Wh40kMatch(models.Model):
         you_won = bool(winner and winner.id == partner.id)
         return {
             "state": self.state,
+            "result": self.result or "",
+            "you_result": self.you_result_for(partner),
             "winner_id": winner.id if winner else None,
             "winner_nickname": (winner.wh40k_nickname or winner.name) if winner else "",
             "you_won": you_won,
             "you_surrendered": not you_won,
+            "is_draw": False,
             "message": (
                 "Victory! Opponent surrendered."
                 if you_won
                 else "Defeat. You surrendered."
             ),
+        }
+
+    def to_draw_result_dict(self, partner):
+        self.ensure_one()
+        self._assert_participant(partner)
+        return {
+            "state": self.state,
+            "result": "draw",
+            "you_result": "draw",
+            "winner_id": None,
+            "winner_nickname": "",
+            "you_won": False,
+            "you_surrendered": False,
+            "is_draw": True,
+            "message": "Draw.",
         }
 
     def _db_write_date_string(self):

@@ -22,6 +22,13 @@ import {
     shouldPollWatch,
     joinLinkIsPublic,
     busJoinShouldEnter,
+    emptyJoinState,
+    unitCharacteristicLines,
+    datasheetFromMatchUnit,
+    isWaitingTimeoutReason,
+    joinFailureLeavesScreen,
+    applyHostCancel,
+    matchResultHeadline,
     UNDO_STACK_LIMIT,
 } from "./battle_store";
 import { createMatchBus } from "./bus_client";
@@ -71,6 +78,8 @@ export class Wh40kCompanionApp extends Component {
         this._busRefreshing = false;
         this._busPending = null;
         this._enteringMatchId = null;
+        this._joinProbeAt = 0;
+        this._joinProbeBusy = false;
 
         onWillStart(async () => {
             await this.loadDashboard();
@@ -249,6 +258,47 @@ export class Wh40kCompanionApp extends Component {
             "/" +
             unit.wounds
         );
+    }
+
+    unitCharacteristicLines(unit) {
+        const fromPayload = unitCharacteristicLines(unit);
+        if (fromPayload.length) {
+            return fromPayload;
+        }
+        if (!unit || unit.unit_id == null) {
+            return [];
+        }
+        const detail = this.findUnitDetail(unit);
+        if (!detail || !Array.isArray(detail.models) || !detail.models.length) {
+            return [];
+        }
+        return unitCharacteristicLines({
+            profiles: detail.models.map((model) => ({
+                name: model.name,
+                quantity: model.quantity,
+                M: model.M,
+                T: model.T,
+                Sv: model.Sv,
+                W: model.W,
+                LD: model.LD,
+                OC: model.OC,
+                InSv: model.InSv,
+            })),
+        });
+    }
+
+    resultHeadline() {
+        return matchResultHeadline(this.state.result);
+    }
+
+    get resultBannerClass() {
+        if (this.state.result && this.state.result.is_draw) {
+            return "wh40k-result-draw";
+        }
+        if (this.state.result && this.state.result.you_won) {
+            return "wh40k-result-win";
+        }
+        return "wh40k-result-loss";
     }
 
     weaponLabel(w) {
@@ -524,16 +574,8 @@ export class Wh40kCompanionApp extends Component {
     }
 
     clearWaitingState() {
-        this.state.waiting = {
-            match_id: null,
-            join_url: "",
-            join_url_public: false,
-            match_token: "",
-            published_at: null,
-            expires_at: null,
-            remaining_ms: 15 * 60 * 1000,
-            write_date: null,
-        };
+        const next = applyHostCancel({ screen: "home" });
+        this.state.waiting = next.waiting;
     }
 
     /**
@@ -557,6 +599,8 @@ export class Wh40kCompanionApp extends Component {
             // Already cancelled by cron / concurrent poll — still go home.
         }
         this.clearWaitingState();
+        this.state.join = emptyJoinState();
+        clearRememberedJoinToken();
         try {
             await this.loadDashboard();
         } catch (_e) {
@@ -566,6 +610,28 @@ export class Wh40kCompanionApp extends Component {
         this.state.error =
             message || "Waiting time expired. Match cancelled.";
         this.state.busy = false;
+    }
+
+    /**
+     * Host cancelled the QR / join wait. Clear the status and leave that screen.
+     * Unlike the timeout path, the banner must not stay on the next screen.
+     */
+    async leaveAfterHostCancel() {
+        const next = applyHostCancel({ screen: this.state.screen });
+        this._waitingTimeoutHandled = true;
+        this.state.waiting = next.waiting;
+        this.state.join = next.join;
+        this.state.busy = false;
+        this.state.error = "";
+        clearRememberedJoinToken();
+        this.setScreen(next.screen);
+        this.state.error = "";
+        try {
+            await this.loadDashboard();
+        } catch (_e) {
+            // home is already showing
+        }
+        this.state.error = "";
     }
 
     tickCountdown() {
@@ -612,6 +678,13 @@ export class Wh40kCompanionApp extends Component {
         }
         const matchId = payload.match_id;
         if (this.state.screen === "waiting" && this.state.waiting.match_id === matchId) {
+            return true;
+        }
+        if (
+            this.state.screen === "join" &&
+            this.state.join.match_id != null &&
+            Number(this.state.join.match_id) === Number(matchId)
+        ) {
             return true;
         }
         return !!(
@@ -661,6 +734,7 @@ export class Wh40kCompanionApp extends Component {
 
     async runWatchLoop() {
         while (this._watchLoop) {
+            this.maybeProbeJoinCancel();
             // The socket is the live path. Watch stays for a failed or dropped bus.
             if (!shouldPollWatch({ busConnected: this._busConnected })) {
                 await new Promise((r) => setTimeout(r, 500));
@@ -700,6 +774,97 @@ export class Wh40kCompanionApp extends Component {
                 (match) => this.applyActiveWatch(match),
                 timeout
             );
+            return;
+        }
+        if (
+            this.state.screen === "join" &&
+            this.state.join.step === "selecting" &&
+            this.state.join.match_id
+        ) {
+            const matchId = this.state.join.match_id;
+            await this.watchMatch(
+                matchId,
+                null,
+                (match) => this.applyJoinWatch(match, matchId),
+                timeout
+            );
+        }
+    }
+
+    maybeProbeJoinCancel() {
+        if (this._joinProbeBusy) {
+            return;
+        }
+        if (this.state.screen !== "join") {
+            return;
+        }
+        const step = this.state.join.step;
+        if (step !== "invite" && step !== "selecting") {
+            return;
+        }
+        if (!this.state.join.token && !this.state.join.match_id) {
+            return;
+        }
+        const now = Date.now();
+        if (this._joinProbeAt && now - this._joinProbeAt < 4000) {
+            return;
+        }
+        this._joinProbeAt = now;
+        this._joinProbeBusy = true;
+        this.probeJoinCancel().finally(() => {
+            this._joinProbeBusy = false;
+        });
+    }
+
+    async probeJoinCancel() {
+        const token = this.state.join.token;
+        if (!token || this.state.screen !== "join") {
+            return;
+        }
+        try {
+            await this.rpc(`${API}/match/verify`, { match_token: token });
+        } catch (e) {
+            if (this.state.screen !== "join" || this.state.join.token !== token) {
+                return;
+            }
+            await this.leaveJoinIfMatchClosed(e && e.message);
+        }
+    }
+
+    async leaveJoinIfMatchClosed(message) {
+        if (isWaitingTimeoutReason(message)) {
+            await this.leaveWaitingAfterTimeout("Waiting time expired. Match cancelled.");
+            return true;
+        }
+        if (joinFailureLeavesScreen(message)) {
+            await this.leaveAfterHostCancel();
+            return true;
+        }
+        return false;
+    }
+
+    async applyJoinWatch(match, matchId) {
+        if (
+            this.state.screen !== "join" ||
+            Number(this.state.join.match_id) !== Number(matchId)
+        ) {
+            return;
+        }
+        if (!match) {
+            return;
+        }
+        if (match.state === "active") {
+            await this.enterGame(match.id || matchId);
+            return;
+        }
+        if (match.state === "cancelled") {
+            if (isWaitingTimeoutReason(match.cancel_reason)) {
+                await this.leaveWaitingAfterTimeout(
+                    "Waiting time expired. Match cancelled."
+                );
+                return;
+            }
+            await this.leaveAfterHostCancel();
         }
     }
 
@@ -763,19 +928,11 @@ export class Wh40kCompanionApp extends Component {
         if (match.state === "active") {
             await this.enterGame(match.id);
         } else if (match.state === "cancelled") {
-            const reason = match.cancel_reason || "Match cancelled.";
-            const isTimeout = /timeout|таймаут/i.test(reason);
-            if (isTimeout) {
+            const reason = match.cancel_reason || "";
+            if (isWaitingTimeoutReason(reason)) {
                 await this.leaveWaitingAfterTimeout("Waiting time expired. Match cancelled.");
             } else {
-                this.clearWaitingState();
-                this.setScreen("home");
-                this.state.error = reason;
-                try {
-                    await this.loadDashboard();
-                } catch (_e) {
-                    // ignore
-                }
+                await this.leaveAfterHostCancel();
             }
         } else if (match.state === "waiting" && this.state.waiting.remaining_ms <= 0) {
             await this.leaveWaitingAfterTimeout("Waiting time expired. Match cancelled.");
@@ -794,6 +951,7 @@ export class Wh40kCompanionApp extends Component {
             };
         }
         if (match.state === "finished") {
+            const isDraw = match.result === "draw" || match.you_result === "draw";
             await this.goHomeAfterMatchEnd({
                 winner_id: match.winner_id,
                 winner_nickname: match.winner_nickname || "",
@@ -801,6 +959,8 @@ export class Wh40kCompanionApp extends Component {
                 guest: match.guest,
                 is_host: !!match.is_host,
                 you_surrendered: false,
+                is_draw: isDraw,
+                message: isDraw ? "Ничья." : "",
             });
         } else if (match.state === "cancelled") {
             this.state.activeMatch = null;
@@ -814,6 +974,7 @@ export class Wh40kCompanionApp extends Component {
         this.state.result = {
             ...this.state.result,
             show_on_home: false,
+            is_draw: false,
             message: "",
         };
     }
@@ -830,6 +991,7 @@ export class Wh40kCompanionApp extends Component {
         is_host = false,
         you_won = null,
         you_surrendered = false,
+        is_draw = false,
         message = "",
     } = {}) {
         if (this._finishingMatch) {
@@ -851,21 +1013,29 @@ export class Wh40kCompanionApp extends Component {
                 resolvedYouWon = myId === winner_id;
             }
             resolvedYouWon = !!resolvedYouWon;
+            const resolvedDraw = !!is_draw;
+            if (resolvedDraw) {
+                resolvedYouWon = false;
+            }
             const resolvedMessage =
                 message ||
-                (you_surrendered
-                    ? "Поражение. Вы сдались."
-                    : resolvedYouWon
-                      ? "Победа! Противник сдался."
-                      : "Матч завершён.");
+                (resolvedDraw
+                    ? "Ничья."
+                    : you_surrendered
+                      ? "Поражение. Вы сдались."
+                      : resolvedYouWon
+                        ? "Победа! Противник сдался."
+                        : "Матч завершён.");
             this.state.result = {
-                winner_nickname: resolvedWinnerNick,
+                winner_nickname: resolvedDraw ? "" : resolvedWinnerNick,
                 you_won: resolvedYouWon,
-                you_surrendered: !!you_surrendered,
+                you_surrendered: resolvedDraw ? false : !!you_surrendered,
+                is_draw: resolvedDraw,
                 message: resolvedMessage,
                 show_on_home: true,
             };
             this.state.showSurrenderModal = false;
+            this.state.showDrawModal = false;
             this.state.activeMatch = null;
             this.state.match = null;
             this.state.datasheet = null;
@@ -887,22 +1057,14 @@ export class Wh40kCompanionApp extends Component {
 
     async cancelWaiting() {
         if (!this.state.waiting.match_id) {
-            this.clearWaitingState();
-            this.setScreen("home");
+            await this.leaveAfterHostCancel();
             return;
         }
         try {
             await this.rpc(`${API}/match/cancel`, {
                 match_id: this.state.waiting.match_id,
             });
-            this.clearWaitingState();
-            this._waitingTimeoutHandled = true;
-            try {
-                await this.loadDashboard();
-            } catch (_e) {
-                // ignore
-            }
-            this.setScreen("home");
+            await this.leaveAfterHostCancel();
         } catch (e) {
             this.setError(e.message);
         }
@@ -938,6 +1100,7 @@ export class Wh40kCompanionApp extends Component {
             });
             this.state.join.verified = true;
             this.state.join.step = "invite";
+            this.state.join.match_id = verified.match_id || null;
             this.state.join.host_nickname = verified.host?.nickname || "Host";
             this.state.join.points = verified.points;
             this.state.join.mission_name = verified.mission?.name || "";
@@ -949,6 +1112,9 @@ export class Wh40kCompanionApp extends Component {
             clearRememberedJoinToken();
             this.state.busy = false;
         } catch (e) {
+            if (await this.leaveJoinIfMatchClosed(e.message)) {
+                return;
+            }
             this.state.join.step = "token";
             this.setError(e.message);
         }
@@ -961,29 +1127,21 @@ export class Wh40kCompanionApp extends Component {
                 match_token: this.state.join.token,
             });
             this.state.join.step = "selecting";
+            this.state.join.match_id = accepted.match_id || this.state.join.match_id;
             this.state.join.rosters = accepted.rosters || [];
             this.state.join.roster_id = this.state.join.rosters[0]?.id || null;
             this.state.busy = false;
         } catch (e) {
+            if (await this.leaveJoinIfMatchClosed(e.message)) {
+                return;
+            }
             this.setError(e.message);
         }
     }
 
     declineInvite() {
         clearRememberedJoinToken();
-        this.state.join = {
-            token: "",
-            step: "token",
-            verified: false,
-            host_nickname: "",
-            host_roster_name: "",
-            host_roster_faction: "",
-            host_roster_points: "",
-            points: "",
-            mission_name: "",
-            rosters: [],
-            roster_id: null,
-        };
+        this.state.join = emptyJoinState();
         this.setScreen("home");
     }
 
@@ -1005,6 +1163,9 @@ export class Wh40kCompanionApp extends Component {
             this.state.busy = false;
             await this.enterGame(joined.match_id);
         } catch (e) {
+            if (await this.leaveJoinIfMatchClosed(e.message)) {
+                return;
+            }
             this.setError(e.message);
         }
     }
@@ -1201,7 +1362,7 @@ export class Wh40kCompanionApp extends Component {
             this.state.datasheet = unit;
             return;
         }
-        this.state.datasheet = this.findUnitDetail(unit);
+        this.state.datasheet = datasheetFromMatchUnit(unit, this.findUnitDetail(unit));
     }
 
     closeDatasheet() {
@@ -1313,6 +1474,34 @@ export class Wh40kCompanionApp extends Component {
                 you_won: !!result.you_won,
                 you_surrendered: !!result.you_surrendered,
                 message: result.message || "",
+            });
+        } catch (e) {
+            this.setError(e.message);
+        }
+    }
+
+    openDrawModal() {
+        this.state.showDrawModal = true;
+    }
+
+    closeDrawModal() {
+        this.state.showDrawModal = false;
+    }
+
+    async confirmDraw() {
+        try {
+            this.state.busy = true;
+            this.state.showDrawModal = false;
+            await this.rpc(`${API}/match/draw`, {
+                match_id: this.state.match.id,
+            });
+            await this.goHomeAfterMatchEnd({
+                is_draw: true,
+                you_won: false,
+                you_surrendered: false,
+                winner_id: null,
+                winner_nickname: "",
+                message: "Ничья.",
             });
         } catch (e) {
             this.setError(e.message);

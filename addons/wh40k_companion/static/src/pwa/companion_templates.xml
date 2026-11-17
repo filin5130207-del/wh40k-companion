@@ -83,12 +83,12 @@
         <h2>Личный кабинет</h2>
         <t t-if="this.state.result.show_on_home &amp;&amp; this.state.result.message">
             <div class="wh40k-result-banner" role="status"
-                 t-att-class="{'wh40k-result-win': this.state.result.you_won, 'wh40k-result-loss': !this.state.result.you_won}">
+                 t-att-class="this.resultBannerClass">
                 <div class="wh40k-resume-copy">
-                    <strong t-out="this.state.result.you_won ? 'Победа!' : 'Матч завершён'"/>
+                    <strong t-out="this.resultHeadline()"/>
                     <p class="wh40k-muted" style="margin: 0.25rem 0 0;"
                        t-out="this.state.result.message"/>
-                    <p t-if="this.state.result.winner_nickname" class="wh40k-muted"
+                    <p t-if="!this.state.result.is_draw &amp;&amp; this.state.result.winner_nickname" class="wh40k-muted"
                        style="margin: 0.25rem 0 0;">
                         Победитель: <t t-out="this.state.result.winner_nickname"/>
                     </p>
@@ -123,6 +123,7 @@
         <div class="wh40k-stats">
             <div class="wh40k-stat"><div class="value" t-out="this.state.player.wins"/><div class="label">Wins</div></div>
             <div class="wh40k-stat"><div class="value" t-out="this.state.player.losses"/><div class="label">Losses</div></div>
+            <div class="wh40k-stat"><div class="value" t-out="this.state.player.draws || 0"/><div class="label">Draws</div></div>
             <div class="wh40k-stat"><div class="value" t-out="this.state.player.total_match"/><div class="label">Matches</div></div>
             <div class="wh40k-stat"><div class="value" t-out="(this.state.player.win_rate || 0).toFixed(0) + '%'"/><div class="label">Win rate</div></div>
         </div>
@@ -353,7 +354,10 @@
     <section class="wh40k-panel">
         <div class="wh40k-side-title">
             <h2 style="margin:0;">Бой</h2>
-            <button class="wh40k-btn wh40k-btn-danger" t-on-click="this.openSurrenderModal">Закончить матч</button>
+            <div class="wh40k-row">
+                <button class="wh40k-btn" t-on-click="this.openDrawModal">Ничья</button>
+                <button class="wh40k-btn wh40k-btn-danger" t-on-click="this.openSurrenderModal">Закончить матч</button>
+            </div>
         </div>
         <p class="wh40k-muted" t-out="this.missionName()"/>
         <p class="wh40k-swipe-hint">Свайп влево/вправо или вкладки — ваш ростер ↔ противник. Иконка § переключает юниты/правила внутри текущей стороны. -W / -M / Destroy / Undo — только ваш ростер.</p>
@@ -427,6 +431,9 @@
                             <div class="wh40k-unit-card" t-att-class="{'destroyed': unit.destroyed}"
                                  t-on-click="() => this.openDatasheet(unit)">
                                 <strong t-out="unit.name"/>
+                                <t t-foreach="this.unitCharacteristicLines(unit)" t-as="charLine" t-key="charLine_index">
+                                    <div class="wh40k-muted wh40k-unit-chars" t-out="charLine"/>
+                                </t>
                                 <div class="wh40k-muted" t-out="this.unitStatusLabel(unit)"/>
                                 <div class="wh40k-unit-actions">
                                     <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', -1)">-W</button>
@@ -478,6 +485,9 @@
                             <div class="wh40k-unit-card wh40k-unit-readonly" t-att-class="{'destroyed': unit.destroyed}"
                                  t-on-click="() => this.openDatasheet(unit)">
                                 <strong t-out="unit.name"/>
+                                <t t-foreach="this.unitCharacteristicLines(unit)" t-as="charLine" t-key="charLine_index">
+                                    <div class="wh40k-muted wh40k-unit-chars" t-out="charLine"/>
+                                </t>
                                 <div class="wh40k-muted" t-out="this.unitStatusLabel(unit)"/>
                                 <div class="wh40k-muted wh40k-readonly-hint">Даташит · без изменения состояния</div>
                             </div>
@@ -503,13 +513,26 @@
             </div>
         </div>
     </t>
+
+    <t t-if="this.state.showDrawModal">
+        <div class="wh40k-modal-backdrop" t-on-click="this.closeDrawModal">
+            <div class="wh40k-modal" t-on-click.stop="">
+                <h3>Зафиксировать ничью?</h3>
+                <p class="wh40k-muted">Оба игрока получат ничью. Это действие нельзя отменить.</p>
+                <div class="wh40k-row">
+                    <button class="wh40k-btn" t-on-click="this.closeDrawModal">Отмена</button>
+                    <button class="wh40k-btn wh40k-btn-primary" t-on-click="this.confirmDraw" t-att-disabled="this.state.busy">Да, ничья</button>
+                </div>
+            </div>
+        </div>
+    </t>
 </t>
 
 <t t-name="wh40k_companion.MatchResultScreen">
     <section class="wh40k-panel" style="text-align:center;">
-        <h2 t-out="this.state.result.you_won ? 'Победа!' : 'Поражение'"/>
+        <h2 t-out="this.resultHeadline()"/>
         <p style="font-size: 1.2rem; font-weight: 600;" t-out="this.state.result.message"/>
-        <p class="wh40k-muted">Победитель: <t t-out="this.state.result.winner_nickname"/></p>
+        <p t-if="!this.state.result.is_draw" class="wh40k-muted">Победитель: <t t-out="this.state.result.winner_nickname"/></p>
         <button class="wh40k-btn wh40k-btn-primary" t-on-click="() => this.setScreen('home')">На главный экран</button>
     </section>
 </t>

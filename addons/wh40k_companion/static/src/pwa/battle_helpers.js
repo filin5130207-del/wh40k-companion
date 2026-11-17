@@ -316,6 +316,166 @@ export function joinLinkIsPublic(waiting) {
     return !!(waiting && waiting.join_url_public === true);
 }
 
+/** Datasheet columns shown on both army cards. Same keys for own and opponent. */
+export const UNIT_PROFILE_FIELDS = ["M", "T", "Sv", "W", "LD", "OC", "InSv"];
+
+export function emptyWaitingState() {
+    return {
+        match_id: null,
+        join_url: "",
+        join_url_public: false,
+        match_token: "",
+        published_at: null,
+        expires_at: null,
+        remaining_ms: 15 * 60 * 1000,
+        write_date: null,
+    };
+}
+
+export function emptyJoinState() {
+    return {
+        token: "",
+        step: "token",
+        verified: false,
+        match_id: null,
+        host_nickname: "",
+        host_roster_name: "",
+        host_roster_faction: "",
+        host_roster_points: "",
+        points: "",
+        mission_name: "",
+        rosters: [],
+        roster_id: null,
+    };
+}
+
+/** Profile keys present on a unit payload. Empty values still count as present. */
+export function unitProfileKeys(unit) {
+    const profiles = (unit && unit.profiles) || [];
+    if (!profiles.length) {
+        return [];
+    }
+    return UNIT_PROFILE_FIELDS.filter((key) =>
+        Object.prototype.hasOwnProperty.call(profiles[0], key)
+    );
+}
+
+/** One readable line per model: ``T 4 · Sv 3+ · W 2`` and the other columns. */
+export function unitCharacteristicLines(unit) {
+    const profiles = (unit && unit.profiles) || [];
+    return profiles
+        .map((profile) => {
+            const bits = UNIT_PROFILE_FIELDS.map((key) => {
+                const value = profile[key];
+                if (value == null || String(value).trim() === "") {
+                    return "";
+                }
+                return `${key} ${value}`;
+            }).filter(Boolean);
+            const qty = Number(profile.quantity) > 1 ? ` ×${profile.quantity}` : "";
+            const name = profile.name ? `${profile.name}${qty}` : "";
+            if (name && bits.length) {
+                return `${name}: ${bits.join(" · ")}`;
+            }
+            return bits.join(" · ") || name;
+        })
+        .filter(Boolean);
+}
+
+/**
+ * Datasheet body for a match unit.
+ * A cached roster model wins when it already has characteristics or weapons.
+ * Otherwise the match payload profiles fill the same columns.
+ */
+export function datasheetFromMatchUnit(unit, cached) {
+    const cachedModels = cached && Array.isArray(cached.models) ? cached.models : [];
+    const cachedHasStats = cachedModels.some(
+        (model) =>
+            model &&
+            (model.T ||
+                model.Sv ||
+                model.W ||
+                model.M ||
+                model.LD ||
+                model.OC ||
+                model.InSv ||
+                (model.weapons && model.weapons.length))
+    );
+    if (cachedHasStats) {
+        return cached;
+    }
+    const profiles = (unit && unit.profiles) || [];
+    if (!profiles.length) {
+        if (cached && cached.name) {
+            return cached;
+        }
+        return { name: (unit && unit.name) || "", models: [] };
+    }
+    return {
+        name: (cached && cached.name) || (unit && unit.name) || "",
+        models: profiles.map((profile, index) => {
+            const cachedModel = cachedModels[index] || {};
+            return {
+                id: profile.id || cachedModel.id || index,
+                name: profile.name || cachedModel.name || (unit && unit.name) || "",
+                quantity: profile.quantity || cachedModel.quantity || 1,
+                M: profile.M || "",
+                T: profile.T || "",
+                Sv: profile.Sv || "",
+                W: profile.W || "",
+                LD: profile.LD || "",
+                OC: profile.OC || "",
+                InSv: profile.InSv || "",
+                weapons: cachedModel.weapons || [],
+            };
+        }),
+    };
+}
+
+export function isWaitingTimeoutReason(reason) {
+    return /timeout|таймаут/i.test(String(reason || ""));
+}
+
+/**
+ * Verify / accept / join failed because the host cancelled or the wait ended.
+ * A bad token is not this case: the guest stays on the token step.
+ */
+export function joinFailureLeavesScreen(message) {
+    return /not joinable|not waiting for a guest|not open for joining|was cancelled|match cancelled|timeout expired|таймаут/i.test(
+        String(message || "")
+    );
+}
+
+/**
+ * Host cancelled the QR / join wait.
+ * Drop the status banner and leave that screen for home.
+ * A waiting timeout is a different path and may keep its message.
+ */
+export function applyHostCancel(state) {
+    const screen = state && state.screen;
+    const leave = screen === "waiting" || screen === "join";
+    return {
+        screen: leave ? "home" : screen || "home",
+        error: "",
+        busy: false,
+        waiting: emptyWaitingState(),
+        join: emptyJoinState(),
+    };
+}
+
+export function matchResultHeadline(result) {
+    if (result && (result.is_draw || result.outcome === "draw")) {
+        return "Ничья";
+    }
+    if (result && result.you_won) {
+        return "Победа!";
+    }
+    if (result && result.you_surrendered) {
+        return "Поражение";
+    }
+    return "Матч завершён";
+}
+
 /**
  * Guest join on the host's bus channel: leave the QR screen now.
  * Do not wait for ``/match/watch`` to finish its long-poll.
@@ -343,6 +503,7 @@ export function createInitialState(initialJoinToken = "") {
             nickname: "",
             wins: 0,
             losses: 0,
+            draws: 0,
             total_match: 0,
             win_rate: 0,
         },
@@ -356,28 +517,11 @@ export function createInitialState(initialJoinToken = "") {
             mission_id: null,
             roster_id: null,
         },
-        waiting: {
-            match_id: null,
-            join_url: "",
-            join_url_public: false,
-            match_token: "",
-            published_at: null,
-            expires_at: null,
-            remaining_ms: 15 * 60 * 1000,
-            write_date: null,
-        },
+        waiting: emptyWaitingState(),
         join: {
+            ...emptyJoinState(),
             token: initialJoinToken,
             step: initialJoinToken ? "loading" : "token",
-            verified: false,
-            host_nickname: "",
-            host_roster_name: "",
-            host_roster_faction: "",
-            host_roster_points: "",
-            points: "",
-            mission_name: "",
-            rosters: [],
-            roster_id: null,
         },
         match: null,
         activeMatch: null,
@@ -390,10 +534,12 @@ export function createInitialState(initialJoinToken = "") {
         gameSide: "own",
         datasheet: null,
         showSurrenderModal: false,
+        showDrawModal: false,
         result: {
             winner_nickname: "",
             you_won: false,
             you_surrendered: false,
+            is_draw: false,
             message: "",
             show_on_home: false,
         },
