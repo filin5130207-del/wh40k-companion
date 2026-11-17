@@ -1015,17 +1015,28 @@ class Wh40kMatch(models.Model):
             ]
         )
 
-    def _read_finish_row(self):
-        """State and winner from this cursor, without flushing a cached row."""
-        self.ensure_one()
-        self.env.cr.execute(
-            "SELECT state, winner_id FROM wh40k_match WHERE id = %s",
-            (self.id,),
-        )
-        row = self.env.cr.fetchone()
+    def _finish_row_from_sql(self, row):
+        """``state``, ``winner_id``, ``result`` from a finish SELECT, or None."""
         if not row or row[0] not in ("finished", "cancelled"):
             return None
-        return {"state": row[0], "winner_id": row[1]}
+        return {
+            "state": row[0],
+            "winner_id": row[1],
+            "result": row[2] or "",
+        }
+
+    def _read_finish_row(self):
+        """State, winner, and result from this cursor, without flushing a cached row.
+
+        ``result`` has to come from SQL. A long-poll that started before the
+        finish still holds an empty ``result`` in the ORM cache.
+        """
+        self.ensure_one()
+        self.env.cr.execute(
+            "SELECT state, winner_id, result FROM wh40k_match WHERE id = %s",
+            (self.id,),
+        )
+        return self._finish_row_from_sql(self.env.cr.fetchone())
 
     def _read_finish_committed(self):
         """Finish row other requests have committed.
@@ -1038,7 +1049,7 @@ class Wh40kMatch(models.Model):
         try:
             cr = self.env.registry.cursor()
             cr.execute(
-                "SELECT state, winner_id FROM wh40k_match WHERE id = %s",
+                "SELECT state, winner_id, result FROM wh40k_match WHERE id = %s",
                 (self.id,),
             )
             row = cr.fetchone()
@@ -1057,9 +1068,7 @@ class Wh40kMatch(models.Model):
                     cr.close()
                 except Exception:  # noqa: BLE001
                     pass
-        if not row or row[0] not in ("finished", "cancelled"):
-            return None
-        return {"state": row[0], "winner_id": row[1]}
+        return self._finish_row_from_sql(row)
 
     def _read_state_row(self):
         """State from this cursor, without flushing a cached match row."""
@@ -1142,6 +1151,7 @@ class Wh40kMatch(models.Model):
         info["lines_only"] = False
         info["terminal_state"] = seen["state"]
         info["terminal_winner_id"] = seen["winner_id"]
+        info["terminal_result"] = seen.get("result") or ""
         return info
 
     def _raw_db_connection(self, cr):
@@ -1366,9 +1376,19 @@ class Wh40kMatch(models.Model):
         if info.get("terminal_state") in ("finished", "cancelled"):
             payload["match"]["state"] = info["terminal_state"]
             payload["lines_only"] = False
-            winner_id = info.get("terminal_winner_id")
-            if winner_id and not payload["match"].get("winner_id"):
-                payload["match"]["winner_id"] = winner_id
+            # to_state_dict() may still be the pre-finish cache. Copy the
+            # result the finish SQL just read. A draw has no winner.
+            committed_result = info.get("terminal_result") or ""
+            if committed_result:
+                payload["match"]["result"] = committed_result
+            if committed_result == "draw":
+                payload["match"]["you_result"] = "draw"
+                payload["match"]["winner_id"] = None
+                payload["match"]["winner_nickname"] = ""
+            else:
+                winner_id = info.get("terminal_winner_id")
+                if winner_id and not payload["match"].get("winner_id"):
+                    payload["match"]["winner_id"] = winner_id
         elif info.get("committed_state"):
             payload["match"]["state"] = info["committed_state"]
             payload["lines_only"] = False

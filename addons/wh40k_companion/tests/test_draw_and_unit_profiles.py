@@ -1,5 +1,7 @@
 """Own-unit characteristics, host-cancel payload, and draw results."""
 
+from unittest.mock import patch
+
 from odoo.exceptions import AccessError, UserError
 from odoo.tests.common import TransactionCase, tagged
 
@@ -165,3 +167,67 @@ class TestWh40kDrawAndUnitProfiles(Wh40kPlayerMixin, TransactionCase):
         )
         self.user_b.partner_id.invalidate_recordset()
         self.assertEqual(self.user_b.partner_id.wh40k_draws, draws_before)
+
+    def _stale_finish_watch(self, match, partner, stale):
+        """Watch payload whose ORM dict is still the pre-finish cache."""
+
+        def stale_state(_self, _partner, base_url=None, request_host=None):
+            return dict(stale)
+
+        with patch.object(type(match), "to_state_dict", stale_state):
+            return match.watch_payload(
+                partner,
+                since_write_date=match._db_write_date_string(),
+                wait=False,
+            )
+
+    def test_stale_watch_finish_payload_reports_draw(self):
+        host_roster = self._make_tiny_roster(self.user_a, name="Host Stale Draw")
+        guest_roster = self._make_tiny_roster(self.user_b, name="Guest Stale Draw")
+        match = self._activate_match(
+            self.user_a, self.user_b, host_roster, guest_roster
+        )
+        match.with_user(self.user_a).action_draw(self.user_a.partner_id)
+        self.env.flush_all()
+        watched = self._stale_finish_watch(
+            match,
+            self.user_b.partner_id,
+            {
+                "id": match.id,
+                "state": "active",
+                "result": "",
+                "you_result": "",
+                "winner_id": self.user_a.partner_id.id,
+                "winner_nickname": "Stale Winner",
+            },
+        )
+        self.assertEqual(watched["match"]["state"], "finished")
+        self.assertEqual(watched["match"]["result"], "draw")
+        self.assertEqual(watched["match"]["you_result"], "draw")
+        self.assertFalse(watched["match"]["winner_id"])
+        self.assertFalse(watched["match"]["winner_nickname"])
+
+    def test_stale_watch_finish_payload_keeps_surrender_winner(self):
+        host_roster = self._make_tiny_roster(self.user_a, name="Host Stale Win")
+        guest_roster = self._make_tiny_roster(self.user_b, name="Guest Stale Loss")
+        match = self._activate_match(
+            self.user_a, self.user_b, host_roster, guest_roster
+        )
+        match.with_user(self.user_b).action_surrender(self.user_b.partner_id)
+        self.env.flush_all()
+        watched = self._stale_finish_watch(
+            match,
+            self.user_a.partner_id,
+            {
+                "id": match.id,
+                "state": "active",
+                "result": "",
+                "you_result": "",
+                "winner_id": None,
+                "winner_nickname": "",
+            },
+        )
+        self.assertEqual(watched["match"]["state"], "finished")
+        self.assertEqual(watched["match"]["result"], "surrender")
+        self.assertEqual(watched["match"]["winner_id"], self.user_a.partner_id.id)
+        self.assertNotEqual(watched["match"].get("you_result"), "draw")
