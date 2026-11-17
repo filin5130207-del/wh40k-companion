@@ -19,6 +19,8 @@
                         csrf_token: "<t t-out="request.csrf_token(None)"/>",
                         debug: "<t t-out="debug"/>",
                         __session_info__: <t t-out="json.dumps(session_info)"/>,
+                        wh40k_bus_version: <t t-out="bus_worker_version_json"/>,
+                        wh40k_bus_last_id: <t t-out="bus_last_id"/>,
                     };
                 </script>
                 <t t-call-assets="wh40k_companion.assets_pwa"/>
