@@ -21,6 +21,7 @@ import {
     watchMatchGoesHome,
     shouldPollWatch,
     joinLinkIsPublic,
+    busJoinShouldEnter,
     UNDO_STACK_LIMIT,
 } from "./battle_store";
 import { createMatchBus } from "./bus_client";
@@ -68,7 +69,8 @@ export class Wh40kCompanionApp extends Component {
         this._bus = null;
         this._busConnected = false;
         this._busRefreshing = false;
-        this._busPending = false;
+        this._busPending = null;
+        this._enteringMatchId = null;
 
         onWillStart(async () => {
             await this.loadDashboard();
@@ -623,15 +625,31 @@ export class Wh40kCompanionApp extends Component {
         if (!this._busTargetsOpenMatch(payload)) {
             return;
         }
-        this._busPending = true;
+        // Keep the latest payload. A join must not be dropped behind a refresh.
+        this._busPending = payload;
         if (this._busRefreshing) {
             return;
         }
         this._busRefreshing = true;
         try {
             while (this._busPending && this._watchLoop) {
-                this._busPending = false;
-                // The row is already committed. Do not park for the long-poll budget.
+                const next = this._busPending;
+                this._busPending = null;
+                if (
+                    this.state.screen === "waiting" &&
+                    busJoinShouldEnter(next, this.state.waiting.match_id)
+                ) {
+                    // /match/state, not the long-poll. The row is already committed.
+                    try {
+                        await this.enterGame(next.match_id);
+                        continue;
+                    } catch (_enter) {
+                        // State route missed the row. Short watch is the fallback.
+                    }
+                }
+                if (!this._busTargetsOpenMatch(next)) {
+                    continue;
+                }
                 await this.pollMatchLifecycle(1);
             }
         } catch (_e) {
@@ -992,6 +1010,27 @@ export class Wh40kCompanionApp extends Component {
     }
 
     async enterGame(matchId) {
+        if (this._enteringMatchId === matchId) {
+            return;
+        }
+        if (
+            this.state.screen === "game" &&
+            this.state.match &&
+            this.state.match.id === matchId
+        ) {
+            return;
+        }
+        this._enteringMatchId = matchId;
+        try {
+            await this._loadGame(matchId);
+        } finally {
+            if (this._enteringMatchId === matchId) {
+                this._enteringMatchId = null;
+            }
+        }
+    }
+
+    async _loadGame(matchId) {
         const data = await this.rpc(`${API}/match/state`, { match_id: matchId });
         if (data.match.state !== "active") {
             this.state.activeMatch = null;

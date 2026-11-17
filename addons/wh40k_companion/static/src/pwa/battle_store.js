@@ -25,6 +25,7 @@ import {
     parseBusNotifications,
     shouldPollWatch,
     joinLinkIsPublic,
+    busJoinShouldEnter,
     UNDO_STACK_LIMIT,
 } from "./battle_helpers";
 
@@ -52,6 +53,7 @@ export {
     parseBusNotifications,
     shouldPollWatch,
     joinLinkIsPublic,
+    busJoinShouldEnter,
     UNDO_STACK_LIMIT,
 };
 

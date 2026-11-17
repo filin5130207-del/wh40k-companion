@@ -934,6 +934,69 @@ class Wh40kMatch(models.Model):
             return None
         return {"state": row[0], "winner_id": row[1]}
 
+    def _read_state_row(self):
+        """State from this cursor, without flushing a cached match row."""
+        self.ensure_one()
+        self.env.cr.execute(
+            "SELECT state FROM wh40k_match WHERE id = %s",
+            (self.id,),
+        )
+        row = self.env.cr.fetchone()
+        return row[0] if row else None
+
+    def _read_state_committed(self):
+        """State other requests have committed. Does not commit this one."""
+        self.ensure_one()
+        cr = None
+        row = None
+        try:
+            cr = self.env.registry.cursor()
+            cr.execute(
+                "SELECT state FROM wh40k_match WHERE id = %s",
+                (self.id,),
+            )
+            row = cr.fetchone()
+            cr.rollback()
+        except Exception:  # noqa: BLE001 — fall back to this cursor
+            _logger.debug("WH40k watch committed-state read failed", exc_info=True)
+            row = None
+            if cr is not None:
+                try:
+                    cr.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+        finally:
+            if cr is not None:
+                try:
+                    cr.close()
+                except Exception:  # noqa: BLE001
+                    pass
+        return row[0] if row else None
+
+    def _nonterminal_lifecycle_info(self, since_write_date, since_rev, seen_state):
+        """Join that ``write_date`` did not show. ``seen_state`` is pre-park.
+
+        A guest join leaves ``waiting`` for ``active``. That must end the
+        long-poll the same way a finish does, not burn the rest of the timeout.
+        """
+        if not seen_state:
+            return None
+        state = self._read_state_row()
+        if not state or state == seen_state:
+            state = self._read_state_committed() or state
+        if not state or state == seen_state:
+            return None
+        if state in ("finished", "cancelled"):
+            return self._terminal_watch_info(
+                since_write_date, since_rev, include_committed=True
+            )
+        self._invalidate_tracked_lines()
+        info = self._classify_change(since_write_date, since_rev)
+        info["changed"] = True
+        info["lines_only"] = False
+        info["committed_state"] = state
+        return info
+
     def _terminal_watch_info(self, since_write_date, since_rev, include_committed=False):
         """Lifecycle result when the match is already finished or cancelled.
 
@@ -1037,13 +1100,18 @@ class Wh40kMatch(models.Model):
             if not getattr(conn, "autocommit", False):
                 conn.commit()
             self._consume_notifies(conn)
-            # Finish may have committed in the gap before LISTEN was active.
+            # Finish or join may have committed in the gap before LISTEN.
+            # Compare with this request's view: a join moves waiting → active
+            # even when write_date stays in the same second.
+            seen_state = self._read_state_row()
             raw.execute(
                 "SELECT state FROM wh40k_match WHERE id = %s",
                 (self.id,),
             )
             row = raw.fetchone()
             if row and row[0] in ("finished", "cancelled"):
+                return True
+            if row and seen_state and row[0] != seen_state:
                 return True
             readable, _w, _x = select.select([conn], [], [], timeout)
             if not readable:
@@ -1100,12 +1168,20 @@ class Wh40kMatch(models.Model):
             remaining = deadline - time.time()
             if remaining <= 0:
                 break
+            seen_state = self._read_state_row()
             if self._park_for_signal(remaining):
                 terminal = self._terminal_watch_info(
                     since_wd, since_rev, include_committed=True
                 )
                 if terminal:
                     return terminal
+                # Join wakes the same NOTIFY as surrender. Do not park again
+                # until the long-poll budget just because the match is not finished.
+                moved = self._nonterminal_lifecycle_info(
+                    since_wd, since_rev, seen_state
+                )
+                if moved:
+                    return moved
         terminal = self._terminal_watch_info(
             since_wd, since_rev, include_committed=True
         )
@@ -1166,4 +1242,7 @@ class Wh40kMatch(models.Model):
             winner_id = info.get("terminal_winner_id")
             if winner_id and not payload["match"].get("winner_id"):
                 payload["match"]["winner_id"] = winner_id
+        elif info.get("committed_state"):
+            payload["match"]["state"] = info["committed_state"]
+            payload["lines_only"] = False
         return payload

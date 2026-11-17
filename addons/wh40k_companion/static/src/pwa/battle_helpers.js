@@ -316,6 +316,23 @@ export function joinLinkIsPublic(waiting) {
     return !!(waiting && waiting.join_url_public === true);
 }
 
+/**
+ * Guest join on the host's bus channel: leave the QR screen now.
+ * Do not wait for ``/match/watch`` to finish its long-poll.
+ */
+export function busJoinShouldEnter(payload, waitingMatchId) {
+    if (!payload || payload.lines_only) {
+        return false;
+    }
+    if (payload.state !== "active") {
+        return false;
+    }
+    if (waitingMatchId == null || payload.match_id == null) {
+        return false;
+    }
+    return Number(payload.match_id) === Number(waitingMatchId);
+}
+
 export function createInitialState(initialJoinToken = "") {
     return {
         screen: "home",

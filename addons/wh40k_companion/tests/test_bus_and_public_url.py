@@ -149,3 +149,25 @@ class TestWh40kBusAndPublicUrl(Wh40kPlayerMixin, TransactionCase):
         ]
         self.assertTrue(line_notes)
         self.assertTrue(all(note["match_id"] == match.id for note in line_notes))
+
+    def test_join_emits_bus_notification_for_host(self):
+        """Guest join pushes state=active on wh40k.match.<host partner id>."""
+        host_roster = self._make_tiny_roster(self.user_a, name="Host Join Bus")
+        guest_roster = self._make_tiny_roster(self.user_b, name="Guest Join Bus")
+        match = self._publish_match(self.user_a, host_roster)
+        match.with_user(self.user_b).action_accept_invite(self.user_b.partner_id)
+        match.with_user(self.user_b).action_join(self.user_b.partner_id, guest_roster)
+        self.assertEqual(match.state, "active")
+
+        payloads = _bus_payloads(self.env, match.id)
+        host_channel = f"wh40k.match.{self.user_a.partner_id.id}"
+        joined = [
+            payload
+            for channel, payload in payloads
+            if channel == host_channel
+            and payload.get("state") == "active"
+            and not payload.get("lines_only")
+        ]
+        self.assertTrue(joined, payloads)
+        self.assertEqual(joined[-1]["match_id"], match.id)
+        self.assertEqual(joined[-1]["state"], "active")

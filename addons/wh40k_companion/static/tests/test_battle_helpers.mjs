@@ -231,6 +231,38 @@ check("watch is the fallback when the bus socket is down", () => {
     assert.equal(mod.shouldPollWatch({}), true);
 });
 
+check("an active bus join leaves the waiting screen without a long-poll", () => {
+    assert.equal(
+        mod.busJoinShouldEnter(
+            { match_id: 4, state: "active", lines_only: false },
+            4
+        ),
+        true
+    );
+    assert.equal(
+        mod.busJoinShouldEnter(
+            { match_id: 4, state: "selecting", lines_only: false },
+            4
+        ),
+        false
+    );
+    assert.equal(
+        mod.busJoinShouldEnter(
+            { match_id: 4, state: "active", lines_only: true },
+            4
+        ),
+        false
+    );
+    assert.equal(
+        mod.busJoinShouldEnter(
+            { match_id: 9, state: "active", lines_only: false },
+            4
+        ),
+        false
+    );
+    assert.equal(mod.busJoinShouldEnter(null, 4), false);
+});
+
 check("a join link is public only when the server says so", () => {
     const state = mod.createInitialState();
     assert.equal(state.waiting.join_url_public, false);
