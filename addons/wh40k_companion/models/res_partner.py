@@ -37,9 +37,10 @@ class ResPartner(models.Model):
             wins = partner.wh40k_wins or 0
             losses = partner.wh40k_losses or 0
             draws = partner.wh40k_draws or 0
-            total = wins + losses + draws
-            partner.wh40k_total_match = total
-            partner.wh40k_win_rate = (wins * 100.0 / total) if total else 0.0
+            # Draws stay in the match total. They are not decisive games.
+            decisive = wins + losses
+            partner.wh40k_total_match = wins + losses + draws
+            partner.wh40k_win_rate = (wins * 100.0 / decisive) if decisive else 0.0
 
     def action_wh40k_record_result(self, won=None, outcome=None):
         """Update win/loss/draw counters after a finished match.

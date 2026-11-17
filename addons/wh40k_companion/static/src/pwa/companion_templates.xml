@@ -125,7 +125,7 @@
             <div class="wh40k-stat"><div class="value" t-out="this.state.player.losses"/><div class="label">Losses</div></div>
             <div class="wh40k-stat"><div class="value" t-out="this.state.player.draws || 0"/><div class="label">Draws</div></div>
             <div class="wh40k-stat"><div class="value" t-out="this.state.player.total_match"/><div class="label">Matches</div></div>
-            <div class="wh40k-stat"><div class="value" t-out="(this.state.player.win_rate || 0).toFixed(0) + '%'"/><div class="label">Win rate</div></div>
+            <div class="wh40k-stat"><div class="value" t-out="this.winRateLabel()"/><div class="label">Win rate</div></div>
         </div>
         <div class="wh40k-row" style="margin-top: 1rem;">
             <button class="wh40k-btn" t-on-click="this.openManualJoin">Присоединиться по QR / ссылке</button>
@@ -350,6 +350,67 @@
     </section>
 </t>
 
+<t t-name="wh40k_companion.SquadCard">
+    <div class="wh40k-unit-card" t-att-class="{'destroyed': unit.destroyed}"
+         t-on-click="() => this.openDatasheet(unit)">
+        <strong t-out="unit.name"/>
+        <div class="wh40k-muted" t-out="this.unitStatusLabel(unit)"/>
+        <div class="wh40k-unit-actions">
+            <button type="button" class="wh40k-btn"
+                    t-att-class="{'active': this.charsOpen(unit)}"
+                    t-att-aria-expanded="this.charsOpen(unit) ? 'true' : 'false'"
+                    t-on-click.stop="() => this.toggleChars(unit)">
+                Характеристики
+            </button>
+            <button type="button" class="wh40k-btn"
+                    t-att-class="{'active': this.modelsOpen(unit)}"
+                    t-att-aria-expanded="this.modelsOpen(unit) ? 'true' : 'false'"
+                    t-on-click.stop="() => this.toggleModels(unit)">
+                Модели
+            </button>
+        </div>
+        <t t-if="this.charsOpen(unit)">
+            <div class="wh40k-char-panel" t-on-click.stop="">
+                <t t-foreach="this.unitCharacteristicLines(unit)" t-as="charLine" t-key="charLine_index">
+                    <div class="wh40k-muted wh40k-unit-chars" t-out="charLine"/>
+                </t>
+                <p t-if="!this.unitCharacteristicLines(unit).length" class="wh40k-muted">Нет характеристик.</p>
+            </div>
+        </t>
+        <t t-if="this.modelsOpen(unit)">
+            <div class="wh40k-model-menu" t-on-click.stop="">
+                <t t-foreach="this.modelRows(unit)" t-as="row" t-key="row.key">
+                    <div class="wh40k-model-row" t-att-class="{'destroyed': row.destroyed}">
+                        <strong t-out="row.name"/>
+                        <div class="wh40k-muted" t-out="this.modelStatusLabel(row)"/>
+                        <div class="wh40k-unit-actions">
+                            <button type="button" class="wh40k-btn"
+                                    t-att-disabled="row.destroyed || row.models_remaining &gt;= row.models"
+                                    t-on-click.stop="() => this.adjustModel(unit, row, 'models', 1)">+M</button>
+                            <button type="button" class="wh40k-btn"
+                                    t-att-disabled="row.destroyed || row.models_remaining &lt;= 0"
+                                    t-on-click.stop="() => this.adjustModel(unit, row, 'models', -1)">−M</button>
+                            <button type="button" class="wh40k-btn"
+                                    t-att-disabled="row.destroyed || row.wounds_remaining &gt;= row.wounds"
+                                    t-on-click.stop="() => this.adjustModel(unit, row, 'wounds', 1)">+W</button>
+                            <button type="button" class="wh40k-btn"
+                                    t-att-disabled="row.destroyed || row.wounds_remaining &lt;= 0"
+                                    t-on-click.stop="() => this.adjustModel(unit, row, 'wounds', -1)">−W</button>
+                            <button type="button" class="wh40k-btn wh40k-btn-danger"
+                                    t-att-disabled="row.destroyed"
+                                    t-on-click.stop="() => this.destroyModel(unit, row)">Уничтожить</button>
+                            <button type="button" class="wh40k-btn wh40k-btn-undo"
+                                    t-att-disabled="!this.canUndoModel(row)"
+                                    t-on-click.stop="() => this.undoModel(unit, row)">Отменить</button>
+                        </div>
+                    </div>
+                </t>
+                <p t-if="!this.modelRows(unit).length" class="wh40k-muted">Нет моделей.</p>
+            </div>
+        </t>
+    </div>
+</t>
+
 <t t-name="wh40k_companion.GameScreen">
     <section class="wh40k-panel">
         <div class="wh40k-side-title">
@@ -360,7 +421,7 @@
             </div>
         </div>
         <p class="wh40k-muted" t-out="this.missionName()"/>
-        <p class="wh40k-swipe-hint">Свайп влево/вправо или вкладки — ваш ростер ↔ противник. Иконка § переключает юниты/правила внутри текущей стороны. -W / -M / Destroy / Undo — только ваш ростер.</p>
+        <p class="wh40k-swipe-hint">Свайп влево/вправо или вкладки — ваш ростер ↔ противник. Иконка § переключает юниты и правила. Характеристики открываются по кнопке. «Модели» меняет каждую миниатюру: +M, −M, +W, −W, уничтожить, отменить. Это могут делать оба игрока.</p>
     </section>
 
     <div class="wh40k-game" t-att-data-side="this.state.gameSide">
@@ -401,7 +462,7 @@
                     <div class="wh40k-side-title">
                         <div class="wh40k-pane-heading">
                             <h3 style="margin:0;" t-out="this.ownSideLabel"/>
-                            <span class="wh40k-muted">Вы · редактирование</span>
+                            <span class="wh40k-muted">Вы</span>
                         </div>
                         <button type="button"
                                 class="wh40k-btn wh40k-rules-toggle"
@@ -428,24 +489,7 @@
                     </t>
                     <t t-else="">
                         <t t-foreach="this.ownUnits" t-as="unit" t-key="unit.unit_id">
-                            <div class="wh40k-unit-card" t-att-class="{'destroyed': unit.destroyed}"
-                                 t-on-click="() => this.openDatasheet(unit)">
-                                <strong t-out="unit.name"/>
-                                <t t-foreach="this.unitCharacteristicLines(unit)" t-as="charLine" t-key="charLine_index">
-                                    <div class="wh40k-muted wh40k-unit-chars" t-out="charLine"/>
-                                </t>
-                                <div class="wh40k-muted" t-out="this.unitStatusLabel(unit)"/>
-                                <div class="wh40k-unit-actions">
-                                    <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', -1)">-W</button>
-                                    <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'wounds', 1)">+W</button>
-                                    <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'models', -1)">-M</button>
-                                    <button class="wh40k-btn" t-on-click.stop="() => this.adjustUnit(unit, 'models', 1)">+M</button>
-                                    <button class="wh40k-btn wh40k-btn-danger" t-on-click.stop="() => this.destroyUnit(unit)">Destroy</button>
-                                    <button class="wh40k-btn wh40k-btn-undo"
-                                            t-att-disabled="!this.canUndo(unit)"
-                                            t-on-click.stop="() => this.undoUnit(unit)">Undo</button>
-                                </div>
-                            </div>
+                            <t t-call="wh40k_companion.SquadCard"/>
                         </t>
                         <p t-if="!this.ownUnits.length" class="wh40k-muted">Нет юнитов.</p>
                     </t>
@@ -455,7 +499,7 @@
                     <div class="wh40k-side-title">
                         <div class="wh40k-pane-heading">
                             <h3 style="margin:0;" t-out="this.oppSideLabel"/>
-                            <span class="wh40k-muted">Противник (только просмотр)</span>
+                            <span class="wh40k-muted">Противник</span>
                         </div>
                         <button type="button"
                                 class="wh40k-btn wh40k-rules-toggle"
@@ -482,15 +526,7 @@
                     </t>
                     <t t-else="">
                         <t t-foreach="this.oppUnits" t-as="unit" t-key="unit.unit_id">
-                            <div class="wh40k-unit-card wh40k-unit-readonly" t-att-class="{'destroyed': unit.destroyed}"
-                                 t-on-click="() => this.openDatasheet(unit)">
-                                <strong t-out="unit.name"/>
-                                <t t-foreach="this.unitCharacteristicLines(unit)" t-as="charLine" t-key="charLine_index">
-                                    <div class="wh40k-muted wh40k-unit-chars" t-out="charLine"/>
-                                </t>
-                                <div class="wh40k-muted" t-out="this.unitStatusLabel(unit)"/>
-                                <div class="wh40k-muted wh40k-readonly-hint">Даташит · без изменения состояния</div>
-                            </div>
+                            <t t-call="wh40k_companion.SquadCard"/>
                         </t>
                         <p t-if="!this.oppUnits.length" class="wh40k-muted">Нет юнитов противника.</p>
                     </t>

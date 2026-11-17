@@ -155,6 +155,190 @@ export function destroyUnitInPlace(unit) {
     return unit;
 }
 
+/** Wins over decisive games. A draw is not in the denominator. */
+export function decisiveWinRate(wins, losses) {
+    const won = Number(wins) || 0;
+    const lost = Number(losses) || 0;
+    const decisive = won + lost;
+    if (decisive <= 0) {
+        return 0;
+    }
+    return (won * 100) / decisive;
+}
+
+export function woundValue(value) {
+    const text = String(value == null || value === "" ? "1" : value)
+        .replace("+", "")
+        .trim();
+    const parsed = parseInt(text || "1", 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        return 1;
+    }
+    return parsed;
+}
+
+/**
+ * One row per miniature already on the roster.
+ * A model profile with quantity 1 is a single row. Quantity N expands to N rows.
+ */
+export function buildModelRows(profiles, unitName) {
+    const rows = [];
+    (profiles || []).forEach((profile) => {
+        if (!profile) {
+            return;
+        }
+        const qty = Math.max(1, Number(profile.quantity) || 1);
+        const wounds = woundValue(profile.W);
+        const id = profile.id;
+        const base = profile.name || unitName || "Model";
+        for (let index = 0; index < qty; index += 1) {
+            rows.push({
+                key: `${id}:${index}`,
+                model_id: id,
+                index,
+                name: qty > 1 ? `${base} ${index + 1}` : base,
+                models: 1,
+                models_remaining: 1,
+                wounds,
+                wounds_remaining: wounds,
+                destroyed: false,
+                undo: [],
+            });
+        }
+    });
+    return rows;
+}
+
+export function ensureModelRows(unit) {
+    if (unit && Array.isArray(unit.model_rows) && unit.model_rows.length) {
+        return unit.model_rows;
+    }
+    const rows = buildModelRows(unit && unit.profiles, unit && unit.name);
+    if (unit) {
+        unit.model_rows = rows;
+    }
+    return rows;
+}
+
+export function rollupModelRows(rows) {
+    const list = rows || [];
+    const models = list.reduce((sum, row) => sum + (Number(row.models) || 0), 0);
+    let modelsRemaining = list.reduce(
+        (sum, row) => sum + (Number(row.models_remaining) || 0),
+        0
+    );
+    const wounds = list.reduce((sum, row) => sum + (Number(row.wounds) || 0), 0);
+    let woundsRemaining = list.reduce(
+        (sum, row) => sum + (Number(row.wounds_remaining) || 0),
+        0
+    );
+    const destroyed = modelsRemaining === 0 || woundsRemaining === 0;
+    if (destroyed) {
+        modelsRemaining = 0;
+        woundsRemaining = 0;
+        list.forEach((row) => {
+            row.models_remaining = 0;
+            row.wounds_remaining = 0;
+            row.destroyed = true;
+        });
+    }
+    return {
+        models,
+        models_remaining: modelsRemaining,
+        wounds,
+        wounds_remaining: woundsRemaining,
+        destroyed,
+    };
+}
+
+function cloneModelRows(rows) {
+    return (rows || []).map((row) => ({
+        ...row,
+        undo: (row.undo || []).map((entry) => ({ ...entry })),
+    }));
+}
+
+/**
+ * +M / -M / +W / -W / destroy / undo on one miniature.
+ * Squad remaining models and wounds become the sum of the rows.
+ * Returns true when the miniature changed.
+ */
+export function applyModelOp(unit, modelKey, op, delta) {
+    if (!unit) {
+        return false;
+    }
+    const rows = cloneModelRows(ensureModelRows(unit));
+    const row = rows.find((item) => item.key === modelKey);
+    if (!row) {
+        return false;
+    }
+    if (op === "undo") {
+        const stack = row.undo || [];
+        const prev = stack.pop();
+        if (!prev) {
+            return false;
+        }
+        row.undo = stack;
+        row.models_remaining = prev.models_remaining;
+        row.wounds_remaining = prev.wounds_remaining;
+        row.destroyed = !!prev.destroyed;
+    } else {
+        if (row.destroyed) {
+            return false;
+        }
+        const before = {
+            models_remaining: row.models_remaining,
+            wounds_remaining: row.wounds_remaining,
+            destroyed: !!row.destroyed,
+        };
+        if (op === "destroy") {
+            row.models_remaining = 0;
+            row.wounds_remaining = 0;
+            row.destroyed = true;
+        } else if (op === "wounds" || op === "models") {
+            applyUnitFieldDelta(row, op, delta);
+        } else {
+            return false;
+        }
+        if (
+            row.models_remaining === before.models_remaining &&
+            row.wounds_remaining === before.wounds_remaining &&
+            !!row.destroyed === before.destroyed
+        ) {
+            return false;
+        }
+        const stack = row.undo || [];
+        stack.push(before);
+        if (stack.length > UNDO_STACK_LIMIT) {
+            stack.splice(0, stack.length - UNDO_STACK_LIMIT);
+        }
+        row.undo = stack;
+    }
+    const totals = rollupModelRows(rows);
+    unit.model_rows = rows;
+    if (totals.models) {
+        unit.models = totals.models;
+    }
+    unit.models_remaining = totals.models_remaining;
+    if (totals.wounds) {
+        unit.wounds = totals.wounds;
+    }
+    unit.wounds_remaining = totals.wounds_remaining;
+    unit.destroyed = totals.destroyed;
+    return true;
+}
+
+export function buildModelDelta(unit, modelKey, op, delta) {
+    return {
+        line_id: unit.line_id,
+        unit_id: unit.unit_id,
+        side: unit.side,
+        model_key: modelKey,
+        op,
+        delta: delta || 0,
+    };
+}
+
 /** One changed line for /match/unit_state. Not the full host/guest lists. */
 export function buildWoundDelta(unit, undoMap) {
     const key = String(unit.unit_id);
@@ -533,6 +717,8 @@ export function createInitialState(initialJoinToken = "") {
         oppPaneMode: "units",
         gameSide: "own",
         datasheet: null,
+        openChars: {},
+        openModels: {},
         showSurrenderModal: false,
         showDrawModal: false,
         result: {

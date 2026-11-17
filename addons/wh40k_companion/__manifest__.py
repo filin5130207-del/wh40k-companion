@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.24.0",
+    "version": "20.0.1.25.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,6 +11,10 @@ create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
+20.0.1.25.0 highlights:
+- Win rate is wins divided by decisive games (wins + losses). Draws stay on the profile and do not move the rate. No decisive games shows 0%.
+- Characteristic columns stay closed until the squad is opened. Each squad has a Models button that lists one row per miniature already on the roster.
+- Either player can change a model on either roster: +M, -M, +W, -W, destroy, undo. Squad M and W are the sum of those rows.
 20.0.1.24.0 highlights:
 - Own army cards in an active match carry the same characteristic columns as the opponent (M, T, Sv, W, LD, OC, InSv).
 - When the host cancels a QR / join wait, both players leave that screen and the status banner is cleared.

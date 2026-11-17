@@ -355,6 +355,81 @@ check("host cancel clears the waiting and join status", () => {
     assert.equal(mod.isWaitingTimeoutReason("Cancelled by host"), false);
 });
 
+check("win rate ignores draws and is zero without decisive games", () => {
+    assert.equal(mod.decisiveWinRate(2, 2), 50);
+    assert.equal(mod.decisiveWinRate(1, 0), 100);
+    assert.equal(mod.decisiveWinRate(3, 1), 75);
+    assert.equal(mod.decisiveWinRate(0, 0), 0);
+    assert.equal(mod.decisiveWinRate(0, 4), 0);
+});
+
+check("wounding or destroying one miniature rolls up to the squad", () => {
+    const single = mod.buildModelRows(
+        [{ id: 1, name: "Warboss", quantity: 1, W: "6" }],
+        "Warboss"
+    );
+    assert.equal(single.length, 1);
+    assert.equal(single[0].name, "Warboss");
+
+    const unit = {
+        name: "Boyz",
+        line_id: 4,
+        unit_id: 9,
+        side: "guest",
+        models: 2,
+        models_remaining: 2,
+        wounds: 4,
+        wounds_remaining: 4,
+        destroyed: false,
+        profiles: [{ id: 7, name: "Boy", quantity: 2, W: "2" }],
+    };
+    const rows = mod.buildModelRows(unit.profiles, unit.name);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].name, "Boy 1");
+    assert.equal(rows[1].name, "Boy 2");
+    unit.model_rows = rows;
+
+    assert.equal(mod.applyModelOp(unit, rows[0].key, "wounds", -1), true);
+    assert.equal(unit.models_remaining, 2);
+    assert.equal(unit.wounds_remaining, 3);
+    assert.equal(unit.destroyed, false);
+    assert.equal(unit.model_rows[0].wounds_remaining, 1);
+    assert.equal(unit.model_rows[1].wounds_remaining, 2);
+
+    assert.equal(mod.applyModelOp(unit, rows[0].key, "destroy", 0), true);
+    assert.equal(unit.models_remaining, 1);
+    assert.equal(unit.wounds_remaining, 2);
+    assert.equal(unit.model_rows[0].destroyed, true);
+    assert.equal(unit.model_rows[0].models_remaining, 0);
+    assert.equal(unit.model_rows[0].wounds_remaining, 0);
+    assert.equal(unit.model_rows[1].models_remaining, 1);
+
+    assert.equal(mod.applyModelOp(unit, rows[0].key, "undo", 0), true);
+    assert.equal(unit.models_remaining, 2);
+    assert.equal(unit.wounds_remaining, 3);
+    assert.equal(unit.model_rows[0].destroyed, false);
+    assert.equal(unit.model_rows[0].wounds_remaining, 1);
+    assert.equal(unit.model_rows[0].models_remaining, 1);
+
+    assert.equal(mod.applyModelOp(unit, rows[0].key, "models", -1), true);
+    assert.equal(unit.models_remaining, 1);
+    assert.equal(unit.wounds_remaining, 2);
+    assert.equal(mod.applyModelOp(unit, rows[1].key, "destroy", 0), true);
+    assert.equal(unit.models_remaining, 0);
+    assert.equal(unit.wounds_remaining, 0);
+    assert.equal(unit.destroyed, true);
+    assert.equal(mod.applyModelOp(unit, rows[1].key, "undo", 0), true);
+    assert.equal(unit.destroyed, false);
+    assert.equal(unit.models_remaining, 1);
+    assert.equal(unit.wounds_remaining, 2);
+    const delta = mod.buildModelDelta(unit, rows[0].key, "undo", 0);
+    assert.equal(delta.model_key, rows[0].key);
+    assert.equal(delta.op, "undo");
+    assert.equal(delta.side, "guest");
+    assert.equal(delta.line_id, 4);
+    assert.equal(delta.unit_id, 9);
+});
+
 check("a draw is its own result headline", () => {
     assert.equal(mod.matchResultHeadline({ is_draw: true, you_won: false }), "Ничья");
     assert.equal(mod.matchResultHeadline({ you_won: true }), "Победа!");

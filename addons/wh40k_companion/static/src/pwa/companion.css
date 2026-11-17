@@ -547,6 +547,29 @@
     font-size: 0.8rem;
 }
 
+.wh40k-char-panel,
+.wh40k-model-menu {
+    margin-top: 0.45rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--wh40k-border);
+}
+
+.wh40k-model-row {
+    padding: 0.35rem 0 0.1rem;
+}
+
+.wh40k-model-row + .wh40k-model-row {
+    border-top: 1px solid var(--wh40k-border);
+}
+
+.wh40k-model-row.destroyed {
+    opacity: 0.55;
+}
+
+.wh40k-unit-actions .wh40k-btn.active {
+    border-color: var(--wh40k-accent, #c9a227);
+}
+
 .wh40k-btn-undo:disabled {
     opacity: 0.35;
 }

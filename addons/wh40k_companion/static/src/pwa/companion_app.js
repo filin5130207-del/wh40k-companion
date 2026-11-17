@@ -15,6 +15,10 @@ import {
     popUndoEntry,
     applyUnitFieldDelta,
     destroyUnitInPlace,
+    decisiveWinRate,
+    buildModelRows,
+    applyModelOp,
+    buildModelDelta,
     buildWoundDelta,
     applyWoundDelta,
     nextLinesRev,
@@ -249,15 +253,70 @@ export class Wh40kCompanionApp extends Component {
 
     unitStatusLabel(unit) {
         return (
-            "Models " +
+            "Модели " +
             unit.models_remaining +
             "/" +
             unit.models +
-            " | Wounds " +
+            " · Раны " +
             unit.wounds_remaining +
             "/" +
             unit.wounds
         );
+    }
+
+    winRateLabel() {
+        const player = this.state.player || {};
+        return decisiveWinRate(player.wins, player.losses).toFixed(0) + "%";
+    }
+
+    squadKey(unit) {
+        return String((unit && (unit.line_id || unit.unit_id)) || "");
+    }
+
+    charsOpen(unit) {
+        return !!(this.state.openChars && this.state.openChars[this.squadKey(unit)]);
+    }
+
+    modelsOpen(unit) {
+        return !!(this.state.openModels && this.state.openModels[this.squadKey(unit)]);
+    }
+
+    toggleChars(unit) {
+        const key = this.squadKey(unit);
+        const openChars = { ...(this.state.openChars || {}) };
+        openChars[key] = !openChars[key];
+        this.state.openChars = openChars;
+    }
+
+    toggleModels(unit) {
+        const key = this.squadKey(unit);
+        const openModels = { ...(this.state.openModels || {}) };
+        openModels[key] = !openModels[key];
+        this.state.openModels = openModels;
+    }
+
+    modelRows(unit) {
+        if (unit && Array.isArray(unit.model_rows) && unit.model_rows.length) {
+            return unit.model_rows;
+        }
+        return buildModelRows(unit && unit.profiles, unit && unit.name);
+    }
+
+    modelStatusLabel(row) {
+        return (
+            "M " +
+            row.models_remaining +
+            "/" +
+            row.models +
+            " · W " +
+            row.wounds_remaining +
+            "/" +
+            row.wounds
+        );
+    }
+
+    canUndoModel(row) {
+        return !!(row && row.undo && row.undo.length);
     }
 
     unitCharacteristicLines(unit) {
@@ -1377,6 +1436,61 @@ export class Wh40kCompanionApp extends Component {
         } catch (e) {
             // ignore
         }
+    }
+
+    async persistModelOp(unit, modelKey, op, delta) {
+        const payload = buildModelDelta(unit, modelKey, op, delta);
+        const data = await this.rpc(`${API}/match/unit_state`, {
+            match_id: this.state.match.id,
+            unit_delta: payload,
+        });
+        if (data && data.delta) {
+            this.state.unitState = applyWoundDelta(this.state.unitState, data.delta);
+        }
+        if (data && data.lines_rev != null && this.state.match) {
+            this.state.match.lines_rev = nextLinesRev(
+                this.state.match.lines_rev,
+                data.lines_rev
+            );
+        }
+    }
+
+    async _changeModel(unit, row, op, delta) {
+        if (!unit || !row || !this.state.match) {
+            return;
+        }
+        if (op !== "undo" && (row.destroyed || unit.destroyed)) {
+            return;
+        }
+        const changed = applyModelOp(unit, row.key, op, delta);
+        if (!changed) {
+            return;
+        }
+        const nextRow = (unit.model_rows || []).find((item) => item.key === row.key);
+        if ((nextRow && nextRow.destroyed) || unit.destroyed) {
+            this.vibrate();
+        }
+        this.state.unitState = this._cloneUnitState();
+        try {
+            await this.persistModelOp(unit, row.key, op, delta);
+        } catch (e) {
+            this.setError(e.message);
+        }
+    }
+
+    adjustModel(unit, row, field, delta) {
+        return this._changeModel(unit, row, field, delta);
+    }
+
+    destroyModel(unit, row) {
+        return this._changeModel(unit, row, "destroy", 0);
+    }
+
+    undoModel(unit, row) {
+        if (!this.canUndoModel(row)) {
+            return;
+        }
+        return this._changeModel(unit, row, "undo", 0);
     }
 
     async persistWoundDelta(unit) {

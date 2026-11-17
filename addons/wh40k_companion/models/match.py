@@ -289,29 +289,24 @@ class Wh40kMatch(models.Model):
         roster_rs = roster.sudo() if roster else roster
         if not roster_rs:
             return vals_list
+        line_model = self.env["wh40k.match.unit.line"]
         for unit in roster_rs.force_ids.mapped("detachment_ids.unit_ids"):
-            wounds = 0
-            models_count = 0
-            for model in unit.model_ids:
-                qty = model.quantity or 1
-                models_count += qty
-                try:
-                    w = int(str(model.wounds or "1").replace("+", "").strip() or "1")
-                except ValueError:
-                    w = 1
-                wounds += w * qty
+            slots = line_model._slots_from_unit(unit)
+            models_count = sum(slot["models"] for slot in slots) or unit.quantity or 1
+            wounds = sum(slot["wounds"] for slot in slots) or 1
             vals_list.append(
                 {
                     "match_id": self.id,
                     "unit_id": unit.id,
                     "side": side,
                     "name": unit.name,
-                    "models": models_count or unit.quantity or 1,
-                    "models_remaining": models_count or unit.quantity or 1,
-                    "wounds": wounds or 1,
-                    "wounds_remaining": wounds or 1,
+                    "models": models_count,
+                    "models_remaining": models_count,
+                    "wounds": wounds,
+                    "wounds_remaining": wounds,
                     "destroyed": False,
                     "undo_stack": "[]",
+                    "model_state": json.dumps(slots),
                 }
             )
         return vals_list
@@ -361,7 +356,12 @@ class Wh40kMatch(models.Model):
             return False
         if "host" in data or "guest" in data:
             return False
-        return "lines" in data or "line_id" in data or "unit_id" in data
+        return (
+            "lines" in data
+            or "line_id" in data
+            or "unit_id" in data
+            or "model_key" in data
+        )
 
     def _line_snapshot_changed(self, line, entry, stack):
         try:
@@ -412,12 +412,13 @@ class Wh40kMatch(models.Model):
             raise UserError("Invalid wound delta.")
 
         partner = updating_partner or self.env.user.partner_id
+        self._assert_participant(partner)
         own_key = self._own_side_key(partner)
 
         if isinstance(delta.get("lines"), list):
             entries = delta["lines"]
             undo_map = delta.get("undo") if isinstance(delta.get("undo"), dict) else {}
-        elif delta.get("line_id") or delta.get("unit_id"):
+        elif delta.get("line_id") or delta.get("unit_id") or delta.get("model_key"):
             entries = [delta]
             if isinstance(delta.get("undo"), list):
                 undo_map = {str(delta.get("unit_id")): delta["undo"]}
@@ -428,19 +429,25 @@ class Wh40kMatch(models.Model):
         else:
             raise UserError("Invalid wound delta.")
 
-        # (match_id, side) — do not load the opponent's lines or any roster tree.
-        own_lines = self.env["wh40k.match.unit.line"].search(
-            [("match_id", "=", self.id), ("side", "=", own_key)]
-        )
-        by_unit = {line.unit_id.id: line for line in own_lines}
-        by_id = {line.id: line for line in own_lines}
+        model_entries = [
+            entry for entry in entries if isinstance(entry, dict) and entry.get("model_key")
+        ]
+        # Squad-level deltas stay on the caller's side. A model action may
+        # target either roster, but only a participant can send one.
+        if model_entries:
+            self._assert_participant(partner)
+            tracked = self.env["wh40k.match.unit.line"].search(
+                [("match_id", "=", self.id)]
+            )
+        else:
+            # (match_id, side) — do not load the opponent's lines or any roster tree.
+            tracked = self.env["wh40k.match.unit.line"].search(
+                [("match_id", "=", self.id), ("side", "=", own_key)]
+            )
+        by_unit = {line.unit_id.id: line for line in tracked}
+        by_id = {line.id: line for line in tracked}
 
-        pending = []
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            if entry.get("side") and entry["side"] != own_key:
-                continue
+        def _line_for(entry):
             line = None
             if entry.get("line_id"):
                 try:
@@ -452,6 +459,21 @@ class Wh40kMatch(models.Model):
                     line = by_unit.get(int(entry["unit_id"]))
                 except (TypeError, ValueError):
                     line = None
+            return line
+
+        pending = []
+        model_pending = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("model_key"):
+                line = _line_for(entry)
+                if line:
+                    model_pending.append((line, entry))
+                continue
+            if entry.get("side") and entry["side"] != own_key:
+                continue
+            line = _line_for(entry)
             if not line:
                 continue
             unit_key = str(line.unit_id.id)
@@ -466,13 +488,26 @@ class Wh40kMatch(models.Model):
 
         changed_entries = []
         changed_undo = {}
-        if pending:
+        if pending or model_pending:
             rev = self._next_line_rev()
+            changed_ids = []
+            for line, entry in model_pending:
+                applied = line.adjust_model(
+                    entry.get("model_key"),
+                    entry.get("op"),
+                    entry.get("delta") or 0,
+                    rev=rev,
+                )
+                if applied:
+                    changed_ids.append(line.id)
             for line, entry, stack in pending:
                 line.action_apply_snapshot(entry, undo_stack=stack, rev=rev)
-                changed_entries.append(line.to_state_entry())
-                changed_undo[str(line.unit_id.id)] = line._undo_list()
-            self._notify_match_changed(lines_rev=rev, lines_only=True)
+                changed_ids.append(line.id)
+            if changed_ids:
+                for line in self.env["wh40k.match.unit.line"].browse(changed_ids):
+                    changed_entries.append(line.to_state_entry())
+                    changed_undo[str(line.unit_id.id)] = line._undo_list()
+                self._notify_match_changed(lines_rev=rev, lines_only=True)
 
         return {
             "lines_rev": self._lines_rev(),
@@ -1010,6 +1045,7 @@ class Wh40kMatch(models.Model):
                 "wounds_remaining",
                 "destroyed",
                 "undo_stack",
+                "model_state",
                 "rev",
                 "write_date",
             ]
