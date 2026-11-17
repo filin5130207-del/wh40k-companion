@@ -544,26 +544,106 @@ export function unitProfileKeys(unit) {
     );
 }
 
+function characteristicBits(profile) {
+    return UNIT_PROFILE_FIELDS.map((key) => {
+        const value = profile && profile[key];
+        if (value == null || String(value).trim() === "") {
+            return "";
+        }
+        return `${key} ${value}`;
+    }).filter(Boolean);
+}
+
+function formatCharacteristicLine(name, bits) {
+    if (name && bits.length) {
+        return `${name}: ${bits.join(" · ")}`;
+    }
+    return bits.join(" · ") || name;
+}
+
 /** One readable line per model: ``T 4 · Sv 3+ · W 2`` and the other columns. */
 export function unitCharacteristicLines(unit) {
     const profiles = (unit && unit.profiles) || [];
     return profiles
         .map((profile) => {
-            const bits = UNIT_PROFILE_FIELDS.map((key) => {
-                const value = profile[key];
-                if (value == null || String(value).trim() === "") {
-                    return "";
-                }
-                return `${key} ${value}`;
-            }).filter(Boolean);
+            const bits = characteristicBits(profile);
             const qty = Number(profile.quantity) > 1 ? ` ×${profile.quantity}` : "";
             const name = profile.name ? `${profile.name}${qty}` : "";
-            if (name && bits.length) {
-                return `${name}: ${bits.join(" · ")}`;
-            }
-            return bits.join(" · ") || name;
+            return formatCharacteristicLine(name, bits);
         })
         .filter(Boolean);
+}
+
+function profileForModelRow(unit, row) {
+    const profiles = (unit && unit.profiles) || [];
+    if (!row || !profiles.length) {
+        return null;
+    }
+    const id = row.model_id;
+    if (id == null || id === false || id === "") {
+        return null;
+    }
+    return profiles.find((profile) => String(profile.id) === String(id)) || null;
+}
+
+/**
+ * Characteristics of one miniature from the Модели list.
+ * Squad lines still list every profile. This line is only that row's profile.
+ */
+export function modelCharacteristicLine(unit, row) {
+    const profile = profileForModelRow(unit, row);
+    if (!profile) {
+        return "";
+    }
+    const name = (row && row.name) || profile.name || "";
+    return formatCharacteristicLine(name, characteristicBits(profile));
+}
+
+/**
+ * What a squad is showing.
+ * ``all`` is every model. A model key is that miniature only. ``""`` is closed.
+ */
+export function charScope(openChars, squadKey) {
+    const value = openChars && openChars[squadKey];
+    if (value === true || value === "all") {
+        return "all";
+    }
+    if (typeof value === "string" && value) {
+        return value;
+    }
+    return "";
+}
+
+/** Squad header toggles every model's characteristics. A second tap closes them. */
+export function toggleSquadCharacteristics(openChars, squadKey) {
+    const next = { ...(openChars || {}) };
+    if (!squadKey) {
+        return next;
+    }
+    if (charScope(next, squadKey) === "all") {
+        delete next[squadKey];
+    } else {
+        next[squadKey] = "all";
+    }
+    return next;
+}
+
+/**
+ * One miniature toggles only its characteristics.
+ * Opening it replaces the squad-wide list.
+ */
+export function toggleModelCharacteristics(openChars, squadKey, modelKey) {
+    const next = { ...(openChars || {}) };
+    const key = modelKey == null ? "" : String(modelKey);
+    if (!squadKey || !key) {
+        return next;
+    }
+    if (charScope(next, squadKey) === key) {
+        delete next[squadKey];
+    } else {
+        next[squadKey] = key;
+    }
+    return next;
 }
 
 /**
@@ -717,6 +797,7 @@ export function createInitialState(initialJoinToken = "") {
         oppPaneMode: "units",
         gameSide: "own",
         datasheet: null,
+        // Squad header stores "all". A miniature stores its model key. Absent is closed.
         openChars: {},
         openModels: {},
         showSurrenderModal: false,

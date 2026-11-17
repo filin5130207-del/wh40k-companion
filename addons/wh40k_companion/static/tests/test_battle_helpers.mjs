@@ -315,6 +315,101 @@ check("own unit characteristics use the same fields as the opponent", () => {
     assert.equal(sheet.models[0].W, "2");
 });
 
+check("squad header opens every model and a miniature opens only itself", () => {
+    const state = mod.createInitialState();
+    assert.deepEqual(state.openChars, {});
+    assert.equal(mod.charScope(state.openChars, "4"), "");
+
+    const unit = {
+        name: "Boyz",
+        line_id: 4,
+        profiles: [
+            {
+                id: 7,
+                name: "Boy",
+                quantity: 2,
+                M: '6"',
+                T: "5",
+                Sv: "5+",
+                W: "2",
+                LD: "7+",
+                OC: "2",
+                InSv: "6+",
+            },
+            {
+                id: 8,
+                name: "Nob",
+                quantity: 1,
+                M: '6"',
+                T: "6",
+                Sv: "4+",
+                W: "3",
+                LD: "6+",
+                OC: "1",
+                InSv: "",
+            },
+        ],
+    };
+    const squadLines = mod.unitCharacteristicLines(unit);
+    assert.equal(squadLines.length, 2);
+    assert.match(squadLines[0], /^Boy ×2: /);
+    assert.match(squadLines[1], /^Nob: /);
+    assert.match(squadLines[0], /T 5/);
+    assert.match(squadLines[1], /T 6/);
+
+    const rows = mod.buildModelRows(unit.profiles, unit.name);
+    assert.equal(rows.length, 3);
+    const boy = rows[0];
+    const nob = rows[2];
+    const boyLine = mod.modelCharacteristicLine(unit, boy);
+    const nobLine = mod.modelCharacteristicLine(unit, nob);
+    assert.match(boyLine, /^Boy 1: /);
+    assert.match(boyLine, /T 5/);
+    assert.equal(boyLine.includes("Nob"), false);
+    assert.equal(boyLine.includes("×"), false);
+    assert.match(nobLine, /^Nob: /);
+    assert.match(nobLine, /T 6/);
+    assert.equal(nobLine.includes("Boy"), false);
+    assert.equal(mod.modelCharacteristicLine(unit, { key: "missing", model_id: 99, name: "Other" }), "");
+
+    let open = mod.toggleSquadCharacteristics(state.openChars, "4");
+    assert.equal(mod.charScope(open, "4"), "all");
+    assert.equal(mod.charScope(open, "9"), "");
+    open = mod.toggleModelCharacteristics(open, "4", boy.key);
+    assert.equal(mod.charScope(open, "4"), boy.key);
+    assert.equal(mod.charScope(open, "4") === "all", false);
+    open = mod.toggleSquadCharacteristics(open, "4");
+    assert.equal(mod.charScope(open, "4"), "all");
+    open = mod.toggleSquadCharacteristics(open, "4");
+    assert.equal(mod.charScope(open, "4"), "");
+    open = mod.toggleModelCharacteristics(open, "4", nob.key);
+    open = mod.toggleModelCharacteristics(open, "4", nob.key);
+    assert.equal(mod.charScope(open, "4"), "");
+    const other = mod.toggleModelCharacteristics(open, "9", boy.key);
+    assert.equal(mod.charScope(other, "9"), boy.key);
+    assert.equal(mod.charScope(other, "4"), "");
+    assert.equal(mod.charScope({ 4: true }, "4"), "all");
+});
+
+check("the squad card has no characteristics button", () => {
+    const xml = readFileSync(join(here, "../src/pwa/companion_templates.xml"), "utf8");
+    const start = xml.indexOf('t-name="wh40k_companion.SquadCard"');
+    const end = xml.indexOf('t-name="wh40k_companion.GameScreen"');
+    const card = xml.slice(start, end);
+    assert.equal(card.includes("Характеристики"), false);
+    assert.equal(card.includes("toggleChars"), false);
+    assert.match(card, /toggleSquadChars\(unit\)/);
+    assert.match(card, /toggleModelChars\(unit, row\)/);
+    assert.match(card, />\s*Модели\s*</);
+    assert.match(card, />\+M</);
+    assert.match(card, />−M</);
+    assert.match(card, />\+W</);
+    assert.match(card, />−W</);
+    assert.match(card, />Уничтожить</);
+    assert.match(card, />Отменить</);
+    assert.equal(card.includes("openDatasheet"), false);
+});
+
 check("host cancel clears the waiting and join status", () => {
     const waiting = mod.createInitialState();
     waiting.screen = "waiting";

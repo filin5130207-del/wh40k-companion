@@ -27,7 +27,11 @@ import {
     joinLinkIsPublic,
     busJoinShouldEnter,
     emptyJoinState,
-    unitCharacteristicLines,
+    unitCharacteristicLines as linesForProfiles,
+    modelCharacteristicLine as lineForModel,
+    charScope,
+    toggleSquadCharacteristics,
+    toggleModelCharacteristics,
     datasheetFromMatchUnit,
     isWaitingTimeoutReason,
     joinFailureLeavesScreen,
@@ -274,18 +278,31 @@ export class Wh40kCompanionApp extends Component {
     }
 
     charsOpen(unit) {
-        return !!(this.state.openChars && this.state.openChars[this.squadKey(unit)]);
+        return charScope(this.state.openChars, this.squadKey(unit)) === "all";
+    }
+
+    modelCharsOpen(unit, row) {
+        const key = row && row.key != null ? String(row.key) : "";
+        return !!key && charScope(this.state.openChars, this.squadKey(unit)) === key;
     }
 
     modelsOpen(unit) {
         return !!(this.state.openModels && this.state.openModels[this.squadKey(unit)]);
     }
 
-    toggleChars(unit) {
-        const key = this.squadKey(unit);
-        const openChars = { ...(this.state.openChars || {}) };
-        openChars[key] = !openChars[key];
-        this.state.openChars = openChars;
+    toggleSquadChars(unit) {
+        this.state.openChars = toggleSquadCharacteristics(
+            this.state.openChars,
+            this.squadKey(unit)
+        );
+    }
+
+    toggleModelChars(unit, row) {
+        this.state.openChars = toggleModelCharacteristics(
+            this.state.openChars,
+            this.squadKey(unit),
+            row && row.key
+        );
     }
 
     toggleModels(unit) {
@@ -319,11 +336,7 @@ export class Wh40kCompanionApp extends Component {
         return !!(row && row.undo && row.undo.length);
     }
 
-    unitCharacteristicLines(unit) {
-        const fromPayload = unitCharacteristicLines(unit);
-        if (fromPayload.length) {
-            return fromPayload;
-        }
+    rosterProfiles(unit) {
         if (!unit || unit.unit_id == null) {
             return [];
         }
@@ -331,19 +344,34 @@ export class Wh40kCompanionApp extends Component {
         if (!detail || !Array.isArray(detail.models) || !detail.models.length) {
             return [];
         }
-        return unitCharacteristicLines({
-            profiles: detail.models.map((model) => ({
-                name: model.name,
-                quantity: model.quantity,
-                M: model.M,
-                T: model.T,
-                Sv: model.Sv,
-                W: model.W,
-                LD: model.LD,
-                OC: model.OC,
-                InSv: model.InSv,
-            })),
-        });
+        return detail.models.map((model) => ({
+            id: model.id,
+            name: model.name,
+            quantity: model.quantity,
+            M: model.M,
+            T: model.T,
+            Sv: model.Sv,
+            W: model.W,
+            LD: model.LD,
+            OC: model.OC,
+            InSv: model.InSv,
+        }));
+    }
+
+    unitCharacteristicLines(unit) {
+        const fromPayload = linesForProfiles(unit);
+        if (fromPayload.length) {
+            return fromPayload;
+        }
+        return linesForProfiles({ profiles: this.rosterProfiles(unit) });
+    }
+
+    modelCharacteristicLine(unit, row) {
+        const fromPayload = lineForModel(unit, row);
+        if (fromPayload) {
+            return fromPayload;
+        }
+        return lineForModel({ profiles: this.rosterProfiles(unit) }, row);
     }
 
     resultHeadline() {
