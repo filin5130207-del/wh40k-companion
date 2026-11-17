@@ -26,6 +26,15 @@ import {
     shouldPollWatch,
     joinLinkIsPublic,
     busJoinShouldEnter,
+    emptyWaitingState,
+    emptyJoinState,
+    unitProfileKeys,
+    unitCharacteristicLines,
+    datasheetFromMatchUnit,
+    isWaitingTimeoutReason,
+    joinFailureLeavesScreen,
+    applyHostCancel,
+    matchResultHeadline,
     UNDO_STACK_LIMIT,
 } from "./battle_helpers";
 
@@ -54,6 +63,15 @@ export {
     shouldPollWatch,
     joinLinkIsPublic,
     busJoinShouldEnter,
+    emptyWaitingState,
+    emptyJoinState,
+    unitProfileKeys,
+    unitCharacteristicLines,
+    datasheetFromMatchUnit,
+    isWaitingTimeoutReason,
+    joinFailureLeavesScreen,
+    applyHostCancel,
+    matchResultHeadline,
     UNDO_STACK_LIMIT,
 };
 

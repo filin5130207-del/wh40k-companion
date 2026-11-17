@@ -8,6 +8,7 @@ class ResPartner(models.Model):
     wh40k_nickname = fields.Char(string="WH40k Nickname", index=True, copy=False)
     wh40k_wins = fields.Integer(string="Wins", default=0)
     wh40k_losses = fields.Integer(string="Losses", default=0)
+    wh40k_draws = fields.Integer(string="Draws", default=0)
     wh40k_total_match = fields.Integer(
         string="Total Matches",
         compute="_compute_wh40k_stats",
@@ -30,20 +31,35 @@ class ResPartner(models.Model):
         "WH40k nickname must be unique.",
     )
 
-    @api.depends("wh40k_wins", "wh40k_losses")
+    @api.depends("wh40k_wins", "wh40k_losses", "wh40k_draws")
     def _compute_wh40k_stats(self):
         for partner in self:
-            total = (partner.wh40k_wins or 0) + (partner.wh40k_losses or 0)
+            wins = partner.wh40k_wins or 0
+            losses = partner.wh40k_losses or 0
+            draws = partner.wh40k_draws or 0
+            total = wins + losses + draws
             partner.wh40k_total_match = total
-            partner.wh40k_win_rate = (partner.wh40k_wins * 100.0 / total) if total else 0.0
+            partner.wh40k_win_rate = (wins * 100.0 / total) if total else 0.0
 
-    def action_wh40k_record_result(self, won):
-        """Update win/loss counters after a finished match."""
+    def action_wh40k_record_result(self, won=None, outcome=None):
+        """Update win/loss/draw counters after a finished match.
+
+        ``won`` remains the surrender/win path. ``outcome`` is ``win``,
+        ``loss``, or ``draw``.
+        """
         self.ensure_one()
-        if won:
+        if outcome is None:
+            if won is None:
+                raise UserError("Match result is required.")
+            outcome = "win" if won else "loss"
+        if outcome == "win":
             self.wh40k_wins += 1
-        else:
+        elif outcome == "loss":
             self.wh40k_losses += 1
+        elif outcome == "draw":
+            self.wh40k_draws += 1
+        else:
+            raise UserError("Unknown match result.")
 
     def to_wh40k_player_dict(self):
         self.ensure_one()
@@ -54,6 +70,7 @@ class ResPartner(models.Model):
             "has_nickname": bool(self.wh40k_nickname),
             "wins": self.wh40k_wins,
             "losses": self.wh40k_losses,
+            "draws": self.wh40k_draws,
             "total_match": self.wh40k_total_match,
             "win_rate": self.wh40k_win_rate,
         }

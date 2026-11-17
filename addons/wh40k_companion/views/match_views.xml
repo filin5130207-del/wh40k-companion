@@ -11,6 +11,7 @@
                 <field name="points"/>
                 <field name="mission_id"/>
                 <field name="state"/>
+                <field name="result"/>
                 <field name="winner_id"/>
             </list>
         </field>
@@ -38,6 +39,7 @@
                             <field name="points"/>
                             <field name="mission_id"/>
                             <field name="match_token" groups="wh40k_companion.group_manager" readonly="1"/>
+                            <field name="result"/>
                             <field name="winner_id"/>
                             <field name="published_at"/>
                             <field name="finished_at"/>

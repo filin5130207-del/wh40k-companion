@@ -263,6 +263,108 @@ check("an active bus join leaves the waiting screen without a long-poll", () => 
     assert.equal(mod.busJoinShouldEnter(null, 4), false);
 });
 
+check("own unit characteristics use the same fields as the opponent", () => {
+    const own = {
+        name: "Intercessors",
+        profiles: [
+            {
+                name: "Intercessor",
+                quantity: 5,
+                M: '6"',
+                T: "4",
+                Sv: "3+",
+                W: "2",
+                LD: "6+",
+                OC: "2",
+                InSv: "",
+            },
+        ],
+    };
+    const opponent = {
+        name: "Boyz",
+        profiles: [
+            {
+                name: "Boy",
+                quantity: 10,
+                M: '6"',
+                T: "5",
+                Sv: "5+",
+                W: "1",
+                LD: "7+",
+                OC: "2",
+                InSv: "6+",
+            },
+        ],
+    };
+    assert.deepEqual(mod.unitProfileKeys(own), mod.unitProfileKeys(opponent));
+    for (const key of ["M", "T", "Sv", "W", "LD", "OC", "InSv"]) {
+        assert.ok(mod.unitProfileKeys(own).includes(key));
+        assert.ok(mod.unitProfileKeys(opponent).includes(key));
+    }
+    const ownLine = mod.unitCharacteristicLines(own)[0];
+    const oppLine = mod.unitCharacteristicLines(opponent)[0];
+    for (const key of ["T", "Sv", "W"]) {
+        assert.match(ownLine, new RegExp(`${key} `));
+        assert.match(oppLine, new RegExp(`${key} `));
+    }
+    assert.match(oppLine, /InSv /);
+    assert.equal(ownLine.includes("InSv "), false);
+    const sheet = mod.datasheetFromMatchUnit(own, { name: own.name, models: [] });
+    assert.equal(sheet.models[0].T, "4");
+    assert.equal(sheet.models[0].Sv, "3+");
+    assert.equal(sheet.models[0].W, "2");
+});
+
+check("host cancel clears the waiting and join status", () => {
+    const waiting = mod.createInitialState();
+    waiting.screen = "waiting";
+    waiting.error = "Cancelled by host";
+    waiting.waiting.match_id = 9;
+    waiting.waiting.join_url = "http://lan/wh40k/join/abc";
+    const host = mod.applyHostCancel(waiting);
+    assert.equal(host.screen, "home");
+    assert.equal(host.error, "");
+    assert.equal(host.waiting.match_id, null);
+    assert.equal(host.waiting.join_url, "");
+
+    const joining = mod.createInitialState();
+    joining.screen = "join";
+    joining.error = "Match is not joinable (state=cancelled).";
+    joining.join.step = "invite";
+    joining.join.token = "abc";
+    joining.join.match_id = 9;
+    joining.join.verified = true;
+    const guest = mod.applyHostCancel(joining);
+    assert.equal(guest.screen, "home");
+    assert.equal(guest.error, "");
+    assert.equal(guest.join.step, "token");
+    assert.equal(guest.join.token, "");
+    assert.equal(guest.join.match_id, null);
+    assert.equal(guest.join.verified, false);
+
+    assert.equal(
+        mod.joinFailureLeavesScreen("Match is not joinable (state=cancelled)."),
+        true
+    );
+    assert.equal(
+        mod.joinFailureLeavesScreen("This match is not waiting for a guest."),
+        true
+    );
+    assert.equal(mod.joinFailureLeavesScreen("Invalid match token."), false);
+    assert.equal(mod.isWaitingTimeoutReason("Waiting timeout expired"), true);
+    assert.equal(mod.isWaitingTimeoutReason("Cancelled by host"), false);
+});
+
+check("a draw is its own result headline", () => {
+    assert.equal(mod.matchResultHeadline({ is_draw: true, you_won: false }), "Ничья");
+    assert.equal(mod.matchResultHeadline({ you_won: true }), "Победа!");
+    assert.equal(
+        mod.matchResultHeadline({ you_won: false, you_surrendered: true }),
+        "Поражение"
+    );
+    assert.equal(mod.matchResultHeadline({ you_won: false }), "Матч завершён");
+});
+
 check("a join link is public only when the server says so", () => {
     const state = mod.createInitialState();
     assert.equal(state.waiting.join_url_public, false);

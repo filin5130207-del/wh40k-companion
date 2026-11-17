@@ -12,6 +12,7 @@
                             <field name="wh40k_nickname"/>
                             <field name="wh40k_wins"/>
                             <field name="wh40k_losses"/>
+                            <field name="wh40k_draws"/>
                         </group>
                         <group>
                             <field name="wh40k_total_match"/>

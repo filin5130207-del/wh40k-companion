@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.23.0",
+    "version": "20.0.1.24.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,6 +11,10 @@ create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
+20.0.1.24.0 highlights:
+- Own army cards in an active match carry the same characteristic columns as the opponent (M, T, Sv, W, LD, OC, InSv).
+- When the host cancels a QR / join wait, both players leave that screen and the status banner is cleared.
+- Either player can record a draw. The match stores result ``draw`` and both players' draw counters move.
 20.0.1.23.0 highlights:
 - A guest join pushes wh40k.match/updated on wh40k.match.<host partner id> immediately. The host leaves the waiting screen from that socket and does not wait for the /match/watch long-poll. The long-poll still returns as soon as the join commits when the socket is down.
 20.0.1.22.0 highlights:

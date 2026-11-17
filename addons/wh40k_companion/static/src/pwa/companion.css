@@ -171,6 +171,12 @@
         linear-gradient(135deg, rgba(160, 64, 48, 0.2), rgba(61, 139, 110, 0.06));
 }
 
+.wh40k-result-banner.wh40k-result-draw {
+    border-color: rgba(196, 168, 92, 0.65);
+    background:
+        linear-gradient(135deg, rgba(196, 168, 92, 0.2), rgba(61, 139, 110, 0.08));
+}
+
 .wh40k-resume-copy {
     flex: 1 1 12rem;
     min-width: 0;
@@ -534,6 +540,11 @@
 .wh40k-readonly-hint {
     margin-top: 0.4rem;
     font-size: 0.75rem;
+}
+
+.wh40k-unit-chars {
+    margin-top: 0.2rem;
+    font-size: 0.8rem;
 }
 
 .wh40k-btn-undo:disabled {

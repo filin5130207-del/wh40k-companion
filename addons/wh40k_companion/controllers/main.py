@@ -396,6 +396,14 @@ class Wh40kCompanionController(http.Controller):
         match.action_surrender(partner)
         return self._ok(**match.to_surrender_result_dict(partner))
 
+    def _api_match_draw(self, match_id=None, **kwargs):
+        partner = self._partner()
+        match = request.env["wh40k.match"].browse(int(match_id))
+        if not match.exists():
+            raise UserError("Match not found.")
+        match.action_draw(partner)
+        return self._ok(**match.to_draw_result_dict(partner))
+
     def _api_match_cancel(self, match_id=None, reason=None, **kwargs):
         partner = self._partner()
         match = request.env["wh40k.match"].browse(int(match_id))
@@ -532,6 +540,10 @@ class Wh40kCompanionController(http.Controller):
     def api_match_surrender(self, match_id=None, **kwargs):
         return self._wrap(self._api_match_surrender, match_id=match_id, **kwargs)
 
+    @http.route("/wh40k/api/match/draw", type="jsonrpc", auth="user")
+    def api_match_draw(self, match_id=None, **kwargs):
+        return self._wrap(self._api_match_draw, match_id=match_id, **kwargs)
+
     @http.route("/wh40k/api/match/cancel", type="jsonrpc", auth="user")
     def api_match_cancel(self, match_id=None, reason=None, **kwargs):
         return self._wrap(
@@ -628,6 +640,10 @@ class Wh40kCompanionController(http.Controller):
     @http.route("/wh40k/match/surrender", type="jsonrpc", auth="user")
     def match_surrender(self, match_id=None, **kwargs):
         return self.api_match_surrender(match_id=match_id, **kwargs)
+
+    @http.route("/wh40k/match/draw", type="jsonrpc", auth="user")
+    def match_draw(self, match_id=None, **kwargs):
+        return self.api_match_draw(match_id=match_id, **kwargs)
 
     @http.route("/wh40k/match/cancel", type="jsonrpc", auth="user")
     def match_cancel(self, match_id=None, reason=None, **kwargs):
