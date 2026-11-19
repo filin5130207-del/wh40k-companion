@@ -212,7 +212,7 @@
         </t>
     </section>
 
-    <t t-call="wh40k_companion.DatasheetModal"/>
+    <t t-call="wh40k_companion.RosterDatasheetModal"/>
 </t>
 
 <t t-name="wh40k_companion.ImportPreview">
@@ -595,6 +595,48 @@
                         <tr>
                             <td t-out="model.M"/><td t-out="model.T"/><td t-out="model.Sv"/>
                             <td t-out="model.W"/><td t-out="model.LD"/><td t-out="model.OC"/><td t-out="model.InSv"/>
+                        </tr>
+                    </table>
+                    <t t-foreach="model.weapons || []" t-as="w" t-key="w.name">
+                        <div>
+                            <strong t-out="w.name"/>
+                            <span class="wh40k-muted" t-out="this.weaponLabel(w)"/>
+                        </div>
+                    </t>
+                </t>
+            </div>
+        </div>
+    </t>
+</t>
+
+<t t-name="wh40k_companion.RosterDatasheetModal">
+    <t t-if="this.state.datasheet">
+        <div class="wh40k-modal-backdrop" t-on-click="this.closeDatasheet">
+            <div class="wh40k-modal wh40k-roster-datasheet" t-on-click.stop="">
+                <div class="wh40k-side-title">
+                    <h3 style="margin:0;" t-out="this.state.datasheet.name"/>
+                    <button class="wh40k-btn" t-on-click="this.closeDatasheet">Close</button>
+                </div>
+                <t t-foreach="this.state.datasheet.models || []" t-as="model" t-key="model.id">
+                    <h4 t-out="model.name + ' ×' + model.quantity"/>
+                    <table>
+                        <tr>
+                            <th class="wh40k-roster-char-label">M</th>
+                            <th class="wh40k-roster-char-label">T</th>
+                            <th class="wh40k-roster-char-label">Sv</th>
+                            <th class="wh40k-roster-char-label">W</th>
+                            <th class="wh40k-roster-char-label">LD</th>
+                            <th class="wh40k-roster-char-label">OC</th>
+                            <th class="wh40k-roster-char-label">InSv</th>
+                        </tr>
+                        <tr>
+                            <td class="wh40k-roster-char-value" t-out="model.M"/>
+                            <td class="wh40k-roster-char-value" t-out="model.T"/>
+                            <td class="wh40k-roster-char-value" t-out="model.Sv"/>
+                            <td class="wh40k-roster-char-value" t-out="model.W"/>
+                            <td class="wh40k-roster-char-value" t-out="model.LD"/>
+                            <td class="wh40k-roster-char-value" t-out="model.OC"/>
+                            <td class="wh40k-roster-char-value" t-out="model.InSv"/>
                         </tr>
                     </table>
                     <t t-foreach="model.weapons || []" t-as="w" t-key="w.name">

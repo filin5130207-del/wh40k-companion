@@ -694,6 +694,14 @@
     text-align: left;
 }
 
+.wh40k-roster-datasheet th.wh40k-roster-char-label {
+    color: var(--wh40k-muted);
+}
+
+.wh40k-roster-datasheet td.wh40k-roster-char-value {
+    color: #fff;
+}
+
 .wh40k-swipe-hint {
     font-size: 0.75rem;
     color: var(--wh40k-muted);

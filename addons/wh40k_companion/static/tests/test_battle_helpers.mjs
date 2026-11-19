@@ -408,6 +408,43 @@ check("the squad card has no characteristics button", () => {
     assert.match(card, />Уничтожить</);
     assert.match(card, />Отменить</);
     assert.equal(card.includes("openDatasheet"), false);
+    assert.match(card, /class="wh40k-muted wh40k-unit-chars"/);
+    assert.equal(card.includes("wh40k-roster-char"), false);
+});
+
+check("roster datasheet colors stay off the match screen", () => {
+    const xml = readFileSync(join(here, "../src/pwa/companion_templates.xml"), "utf8");
+    const rosterStart = xml.indexOf('t-name="wh40k_companion.RosterDetailScreen"');
+    const rosterEnd = xml.indexOf('t-name="wh40k_companion.ImportPreview"');
+    const roster = xml.slice(rosterStart, rosterEnd);
+    assert.match(roster, /wh40k_companion\.RosterDatasheetModal/);
+    assert.equal(roster.includes('t-call="wh40k_companion.DatasheetModal"'), false);
+
+    const gameStart = xml.indexOf('t-name="wh40k_companion.GameScreen"');
+    const gameEnd = xml.indexOf('t-name="wh40k_companion.MatchResultScreen"');
+    const game = xml.slice(gameStart, gameEnd);
+    assert.match(game, /t-call="wh40k_companion\.DatasheetModal"/);
+    assert.equal(game.includes("RosterDatasheetModal"), false);
+    assert.equal(game.includes("wh40k-roster-char"), false);
+
+    const sheetStart = xml.indexOf('t-name="wh40k_companion.DatasheetModal"');
+    const rosterSheetStart = xml.indexOf('t-name="wh40k_companion.RosterDatasheetModal"');
+    const matchSheet = xml.slice(sheetStart, rosterSheetStart);
+    assert.equal(matchSheet.includes("wh40k-roster-char"), false);
+    const rosterSheet = xml.slice(rosterSheetStart);
+    assert.match(rosterSheet, /wh40k-roster-char-label/);
+    assert.match(rosterSheet, /wh40k-roster-char-value/);
+
+    const css = readFileSync(join(here, "../src/pwa/companion.css"), "utf8");
+    assert.match(
+        css,
+        /\.wh40k-roster-datasheet th\.wh40k-roster-char-label\s*\{[^}]*color:\s*var\(--wh40k-muted\)/
+    );
+    assert.match(
+        css,
+        /\.wh40k-roster-datasheet td\.wh40k-roster-char-value\s*\{[^}]*color:\s*#fff/
+    );
+    assert.equal(css.includes("wh40k-char-value"), false);
 });
 
 check("host cancel clears the waiting and join status", () => {
