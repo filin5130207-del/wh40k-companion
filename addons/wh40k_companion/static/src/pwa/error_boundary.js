@@ -1,29 +1,27 @@
 /** @odoo-module **/
 
-import { Component, onError, proxy, t, useProps, xml } from "@odoo/owl";
+import { Component, onError, proxy, useProps, xml } from "@odoo/owl";
 
 /**
  * Catches render errors so a single screen failure does not kill the PWA shell.
+ *
+ * Owl renders a slot with t-call-slot. A nested t-slot is never painted, so
+ * the shell stayed empty except for the bottom nav.
  */
 export class Wh40kErrorBoundary extends Component {
     static template = xml`
         <t t-if="this.state.error">
             <section class="wh40k-panel">
                 <h2>Something went wrong</h2>
-                <p class="wh40k-error" t-esc="this.state.error"/>
+                <p class="wh40k-error" t-out="this.state.error"/>
                 <button type="button" class="wh40k-btn wh40k-btn-primary" t-on-click="this.recover">
                     Back to home
                 </button>
             </section>
         </t>
-        <t t-else="">
-            <t t-slot="default"/>
-        </t>
+        <t t-else="" t-call-slot="default"/>
     `;
-    props = useProps({
-        slots: t.object().optional(),
-        onRecover: t.function().optional(),
-    });
+    props = useProps(["onRecover", "slots"]);
 
     setup() {
         this.state = proxy({ error: "" });
