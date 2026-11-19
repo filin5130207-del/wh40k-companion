@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.25.0",
+    "version": "20.0.1.26.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,6 +11,9 @@ create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
+20.0.1.26.0 highlights:
+- The Характеристики button is gone. Tapping a squad header opens every model's characteristics. Tapping one miniature inside Модели opens only that model's characteristics. A second tap closes them.
+- Модели, the per-model +M -M +W -W / destroy / undo controls, and the squad M/W rollup stay. Stat lines stay hidden until a squad or a model is opened.
 20.0.1.25.0 highlights:
 - Win rate is wins divided by decisive games (wins + losses). Draws stay on the profile and do not move the rate. No decisive games shows 0%.
 - Characteristic columns stay closed until the squad is opened. Each squad has a Models button that lists one row per miniature already on the roster.

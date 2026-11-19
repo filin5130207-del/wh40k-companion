@@ -542,6 +542,48 @@
     font-size: 0.75rem;
 }
 
+.wh40k-squad-hit,
+.wh40k-model-hit {
+    appearance: none;
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.wh40k-squad-hit:hover,
+.wh40k-model-hit:hover,
+.wh40k-squad-hit:focus,
+.wh40k-model-hit:focus {
+    background: transparent;
+    color: inherit;
+    box-shadow: none;
+}
+
+.wh40k-squad-hit:focus-visible,
+.wh40k-model-hit:focus-visible {
+    outline: 1px solid var(--wh40k-warn);
+    outline-offset: 2px;
+}
+
+.wh40k-squad-status {
+    display: block;
+}
+
+.wh40k-squad-hit.active strong,
+.wh40k-model-hit.active strong {
+    color: var(--wh40k-warn);
+}
+
 .wh40k-unit-chars {
     margin-top: 0.2rem;
     font-size: 0.8rem;
@@ -650,6 +692,14 @@
     border-bottom: 1px solid var(--wh40k-border);
     padding: 0.35rem 0.4rem;
     text-align: left;
+}
+
+.wh40k-roster-datasheet th.wh40k-roster-char-label {
+    color: var(--wh40k-muted);
+}
+
+.wh40k-roster-datasheet td.wh40k-roster-char-value {
+    color: #fff;
 }
 
 .wh40k-swipe-hint {

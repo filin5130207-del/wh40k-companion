@@ -2,6 +2,8 @@ import json
 import logging
 import re
 
+from markupsafe import Markup
+
 from odoo import http
 from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.http import request
@@ -64,7 +66,7 @@ class Wh40kCompanionController(http.Controller):
             _logger.debug("WH40k bus last id unavailable", exc_info=True)
             last_id = 0
         return {
-            "bus_worker_version_json": json.dumps(version),
+            "bus_worker_version_json": Markup(json.dumps(version)),
             "bus_last_id": last_id,
         }
 
