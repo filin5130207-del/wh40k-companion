@@ -309,6 +309,16 @@ check("own unit characteristics use the same fields as the opponent", () => {
     }
     assert.match(oppLine, /InSv /);
     assert.equal(ownLine.includes("InSv "), false);
+    const ownParts = mod.unitCharacteristicParts(own)[0];
+    assert.equal(ownParts.name, "Intercessor ×5");
+    assert.deepEqual(
+        ownParts.bits.find((bit) => bit.label === "Sv"),
+        { label: "Sv", value: "3+" }
+    );
+    assert.equal(
+        ownParts.bits.some((bit) => bit.label === "InSv"),
+        false
+    );
     const sheet = mod.datasheetFromMatchUnit(own, { name: own.name, models: [] });
     assert.equal(sheet.models[0].T, "4");
     assert.equal(sheet.models[0].Sv, "3+");
@@ -370,6 +380,13 @@ check("squad header opens every model and a miniature opens only itself", () => 
     assert.match(nobLine, /^Nob: /);
     assert.match(nobLine, /T 6/);
     assert.equal(nobLine.includes("Boy"), false);
+    const boyParts = mod.modelCharacteristicParts(unit, boy);
+    assert.equal(boyParts.name, "Boy 1");
+    assert.deepEqual(
+        boyParts.bits.find((bit) => bit.label === "T"),
+        { label: "T", value: "5" }
+    );
+    assert.equal(mod.modelCharacteristicParts(unit, { key: "missing", model_id: 99, name: "Other" }), null);
     assert.equal(mod.modelCharacteristicLine(unit, { key: "missing", model_id: 99, name: "Other" }), "");
 
     let open = mod.toggleSquadCharacteristics(state.openChars, "4");
@@ -408,6 +425,15 @@ check("the squad card has no characteristics button", () => {
     assert.match(card, />Уничтожить</);
     assert.match(card, />Отменить</);
     assert.equal(card.includes("openDatasheet"), false);
+    assert.equal(card.includes('class="wh40k-muted wh40k-unit-chars"'), false);
+    const lineStart = xml.indexOf('t-name="wh40k_companion.CharacteristicLine"');
+    const line = xml.slice(lineStart, start);
+    assert.match(line, /wh40k-char-label/);
+    assert.match(line, /wh40k-char-value/);
+    assert.equal((card.match(/wh40k_companion\.CharacteristicLine/g) || []).length, 2);
+    const css = readFileSync(join(here, "../src/pwa/companion.css"), "utf8");
+    assert.match(css, /\.wh40k-char-label\s*,?[\s\S]*?color:\s*var\(--wh40k-muted\)/);
+    assert.match(css, /\.wh40k-char-value\s*\{[^}]*color:\s*#fff/);
 });
 
 check("host cancel clears the waiting and join status", () => {

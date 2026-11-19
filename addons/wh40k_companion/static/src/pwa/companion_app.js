@@ -27,8 +27,8 @@ import {
     joinLinkIsPublic,
     busJoinShouldEnter,
     emptyJoinState,
-    unitCharacteristicLines as linesForProfiles,
-    modelCharacteristicLine as lineForModel,
+    unitCharacteristicParts as partsForProfiles,
+    modelCharacteristicParts as partsForModel,
     charScope,
     toggleSquadCharacteristics,
     toggleModelCharacteristics,
@@ -359,19 +359,19 @@ export class Wh40kCompanionApp extends Component {
     }
 
     unitCharacteristicLines(unit) {
-        const fromPayload = linesForProfiles(unit);
+        const fromPayload = partsForProfiles(unit);
         if (fromPayload.length) {
             return fromPayload;
         }
-        return linesForProfiles({ profiles: this.rosterProfiles(unit) });
+        return partsForProfiles({ profiles: this.rosterProfiles(unit) });
     }
 
     modelCharacteristicLine(unit, row) {
-        const fromPayload = lineForModel(unit, row);
+        const fromPayload = partsForModel(unit, row);
         if (fromPayload) {
             return fromPayload;
         }
-        return lineForModel({ profiles: this.rosterProfiles(unit) }, row);
+        return partsForModel({ profiles: this.rosterProfiles(unit) }, row);
     }
 
     resultHeadline() {

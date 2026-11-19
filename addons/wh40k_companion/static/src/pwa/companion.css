@@ -587,6 +587,17 @@
 .wh40k-unit-chars {
     margin-top: 0.2rem;
     font-size: 0.8rem;
+    color: var(--wh40k-muted);
+}
+
+.wh40k-char-name,
+.wh40k-char-sep,
+.wh40k-char-label {
+    color: var(--wh40k-muted);
+}
+
+.wh40k-char-value {
+    color: #fff;
 }
 
 .wh40k-char-panel,

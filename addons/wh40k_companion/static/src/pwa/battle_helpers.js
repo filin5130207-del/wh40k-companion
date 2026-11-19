@@ -548,30 +548,47 @@ function characteristicBits(profile) {
     return UNIT_PROFILE_FIELDS.map((key) => {
         const value = profile && profile[key];
         if (value == null || String(value).trim() === "") {
-            return "";
+            return null;
         }
-        return `${key} ${value}`;
+        return { label: key, value: String(value) };
     }).filter(Boolean);
 }
 
 function formatCharacteristicLine(name, bits) {
+    const text = bits.map((bit) => `${bit.label} ${bit.value}`).join(" · ");
     if (name && bits.length) {
-        return `${name}: ${bits.join(" · ")}`;
+        return `${name}: ${text}`;
     }
-    return bits.join(" · ") || name;
+    return text || name;
+}
+
+function characteristicLine(name, bits) {
+    if (!name && !bits.length) {
+        return null;
+    }
+    return { name: name || "", bits };
+}
+
+/**
+ * One line per model, split so the label and the value can take different colors.
+ * ``name`` is the model prefix (``Boy ×2``). ``bits`` are ``{label, value}``.
+ */
+export function unitCharacteristicParts(unit) {
+    const profiles = (unit && unit.profiles) || [];
+    return profiles
+        .map((profile) => {
+            const qty = Number(profile.quantity) > 1 ? ` ×${profile.quantity}` : "";
+            const name = profile.name ? `${profile.name}${qty}` : "";
+            return characteristicLine(name, characteristicBits(profile));
+        })
+        .filter(Boolean);
 }
 
 /** One readable line per model: ``T 4 · Sv 3+ · W 2`` and the other columns. */
 export function unitCharacteristicLines(unit) {
-    const profiles = (unit && unit.profiles) || [];
-    return profiles
-        .map((profile) => {
-            const bits = characteristicBits(profile);
-            const qty = Number(profile.quantity) > 1 ? ` ×${profile.quantity}` : "";
-            const name = profile.name ? `${profile.name}${qty}` : "";
-            return formatCharacteristicLine(name, bits);
-        })
-        .filter(Boolean);
+    return unitCharacteristicParts(unit).map((line) =>
+        formatCharacteristicLine(line.name, line.bits)
+    );
 }
 
 function profileForModelRow(unit, row) {
@@ -588,15 +605,24 @@ function profileForModelRow(unit, row) {
 
 /**
  * Characteristics of one miniature from the Модели list.
- * Squad lines still list every profile. This line is only that row's profile.
+ * Squad lines still list every profile. This line is only that row's profile,
+ * split into label and value parts.
  */
-export function modelCharacteristicLine(unit, row) {
+export function modelCharacteristicParts(unit, row) {
     const profile = profileForModelRow(unit, row);
     if (!profile) {
-        return "";
+        return null;
     }
     const name = (row && row.name) || profile.name || "";
-    return formatCharacteristicLine(name, characteristicBits(profile));
+    return characteristicLine(name, characteristicBits(profile));
+}
+
+export function modelCharacteristicLine(unit, row) {
+    const line = modelCharacteristicParts(unit, row);
+    if (!line) {
+        return "";
+    }
+    return formatCharacteristicLine(line.name, line.bits);
 }
 
 /**
