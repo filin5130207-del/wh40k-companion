@@ -29,14 +29,74 @@
 
     <template id="signup_page" name="WH40k Companion Signup">
         <t t-set="head">
+            <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
             <t t-call-assets="wh40k_companion.assets_public"/>
             <style>
-                body { margin: 0; background: #0e1319; }
-                .wh40k-public { max-width: 520px; margin: 3rem auto; padding: 1rem; }
+                html, body { margin: 0; background: #0e1319; overflow-x: hidden; }
+                /* Phone width: one column, edge to edge, small side padding.
+                   web.layout has no viewport meta, so without the tag above a
+                   phone lays this out as a desktop page and shrinks it. */
+                .wh40k-public.wh40k-signup {
+                    width: 100%;
+                    max-width: 100%;
+                    margin: 0;
+                    padding: 12px;
+                    padding-left: max(12px, env(safe-area-inset-left));
+                    padding-right: max(12px, env(safe-area-inset-right));
+                    min-height: 100vh;
+                    box-sizing: border-box;
+                    overflow-x: hidden;
+                }
+                .wh40k-signup .wh40k-header,
+                .wh40k-signup .wh40k-panel,
+                .wh40k-signup-form {
+                    width: 100%;
+                    max-width: 100%;
+                    min-width: 0;
+                    box-sizing: border-box;
+                }
+                .wh40k-signup-form {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: stretch;
+                }
+                .wh40k-signup-form label {
+                    display: block;
+                    margin: 0 0 0.35rem;
+                }
+                .wh40k-signup-form .wh40k-input {
+                    display: block;
+                    width: 100%;
+                    max-width: 100%;
+                    min-height: 44px;
+                    font-size: 16px;
+                    line-height: 1.25;
+                    box-sizing: border-box;
+                }
+                .wh40k-signup-form .wh40k-row {
+                    display: flex;
+                    flex-direction: column;
+                    flex-wrap: nowrap;
+                    align-items: stretch;
+                    width: 100%;
+                    max-width: 100%;
+                }
+                .wh40k-signup-form .wh40k-btn {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    max-width: 100%;
+                    min-height: 44px;
+                    box-sizing: border-box;
+                    font-size: 16px;
+                    text-align: center;
+                    text-decoration: none;
+                }
             </style>
         </t>
         <t t-call="web.layout" head="head">
-            <div class="wh40k-app wh40k-public">
+            <div class="wh40k-app wh40k-public wh40k-signup">
                 <header class="wh40k-header">
                     <h1 class="wh40k-brand">WH40k <span>Companion</span></h1>
                 </header>
@@ -44,7 +104,7 @@
                     <h2>Sign up</h2>
                     <p class="wh40k-muted">Create an account and a unique battle nickname.</p>
                     <div t-if="error" class="wh40k-error" t-out="error"/>
-                    <form action="/wh40k/signup" method="post">
+                    <form class="wh40k-signup-form" action="/wh40k/signup" method="post">
                         <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
                         <input type="hidden" name="join" t-att-value="join or ''"/>
                         <label class="wh40k-muted">Email</label>
