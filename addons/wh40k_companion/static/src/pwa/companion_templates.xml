@@ -350,18 +350,6 @@
     </section>
 </t>
 
-<t t-name="wh40k_companion.CharacteristicLine">
-    <div class="wh40k-unit-chars">
-        <span t-if="line.name" class="wh40k-char-name" t-out="line.name"/>
-        <span t-if="line.name &amp;&amp; line.bits.length" class="wh40k-char-sep">: </span>
-        <t t-foreach="line.bits" t-as="bit" t-key="bit.label">
-            <span t-if="bit_index" class="wh40k-char-sep"> · </span>
-            <span class="wh40k-char-label" t-out="bit.label + ' '"/>
-            <span class="wh40k-char-value" t-out="bit.value"/>
-        </t>
-    </div>
-</t>
-
 <t t-name="wh40k_companion.SquadCard">
     <div class="wh40k-unit-card" t-att-class="{'destroyed': unit.destroyed}">
         <button type="button" class="wh40k-squad-hit"
@@ -382,9 +370,7 @@
         <t t-if="this.charsOpen(unit)">
             <div class="wh40k-char-panel" t-on-click.stop="">
                 <t t-foreach="this.unitCharacteristicLines(unit)" t-as="charLine" t-key="charLine_index">
-                    <t t-call="wh40k_companion.CharacteristicLine">
-                        <t t-set="line" t-value="charLine"/>
-                    </t>
+                    <div class="wh40k-muted wh40k-unit-chars" t-out="charLine"/>
                 </t>
                 <p t-if="!this.unitCharacteristicLines(unit).length" class="wh40k-muted">Нет характеристик.</p>
             </div>
@@ -401,11 +387,7 @@
                             <span class="wh40k-muted wh40k-squad-status" t-out="this.modelStatusLabel(row)"/>
                         </button>
                         <t t-if="this.modelCharsOpen(unit, row)">
-                            <t t-if="this.modelCharacteristicLine(unit, row)">
-                                <t t-call="wh40k_companion.CharacteristicLine">
-                                    <t t-set="line" t-value="this.modelCharacteristicLine(unit, row)"/>
-                                </t>
-                            </t>
+                            <div class="wh40k-muted wh40k-unit-chars" t-out="this.modelCharacteristicLine(unit, row)"/>
                             <p t-if="!this.modelCharacteristicLine(unit, row)" class="wh40k-muted">Нет характеристик.</p>
                         </t>
                         <div class="wh40k-unit-actions" t-on-click.stop="">
