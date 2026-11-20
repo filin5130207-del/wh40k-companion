@@ -40,6 +40,16 @@ def main() -> int:
     if not first_model.get("weapons"):
         print("FAIL: expected weapons on first model", file=sys.stderr)
         return 1
+    names = parsed.get("detachment_names") or []
+    expected = [
+        "Saga of the Beastslayer",
+        "Assault Brethren",
+        "Stormlance Task Force",
+    ]
+    if names != expected:
+        print(f"FAIL: selected detachments {names!r}, expected {expected!r}", file=sys.stderr)
+        return 1
+    print("selected detachments:", ", ".join(names))
     print("OK")
     return 0
 

@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.26.0",
+    "version": "20.0.1.27.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,6 +11,10 @@ create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
+20.0.1.27.0 highlights:
+- Roster import stores the selected detachment name. Stratagem text stays in a static catalogue keyed by faction and detachment, and is not copied onto the roster.
+- «Стратагемы» sits next to «Правила» on the player's roster and on the opponent's roster. The list shows name and CP. Tapping a row opens its text; tapping it again closes it. There is no used toggle and no CP spend.
+- A detachment with no catalogue entry still imports. The list is empty and says "no deck for this detachment".
 20.0.1.26.0 highlights:
 - The Характеристики button is gone. Tapping a squad header opens every model's characteristics. Tapping one miniature inside Модели opens only that model's characteristics. A second tap closes them.
 - Модели, the per-model +M -M +W -W / destroy / undo controls, and the squad M/W rollup stay. Stat lines stay hidden until a squad or a model is opened.

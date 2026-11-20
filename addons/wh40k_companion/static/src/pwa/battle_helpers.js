@@ -757,6 +757,84 @@ export function busJoinShouldEnter(payload, waitingMatchId) {
     return Number(payload.match_id) === Number(waitingMatchId);
 }
 
+export const NO_DECK_MESSAGE = "no deck for this detachment";
+
+/** «Правила» / «Стратагемы» toggle. The active target returns to the unit list. */
+export function togglePaneMode(current, target) {
+    return current === target ? "units" : target;
+}
+
+export function paneHeading(mode) {
+    if (mode === "rules") {
+        return "Правила армии";
+    }
+    if (mode === "stratagems") {
+        return "Стратагемы";
+    }
+    return "Юниты";
+}
+
+export function stratagemKey(strat) {
+    if (!strat) {
+        return "";
+    }
+    return `${strat.detachment || ""}::${strat.name || ""}`;
+}
+
+/** Tap opens one stratagem. Tapping that same row again closes it. */
+export function toggleOpenStratagem(openKey, strat) {
+    const key = stratagemKey(strat);
+    return openKey === key ? null : key;
+}
+
+export function stratagemCpLabel(cp) {
+    if (cp === null || cp === undefined || cp === "") {
+        return "";
+    }
+    return `${cp} CP`;
+}
+
+export function stratagemBody(strat) {
+    if (!strat) {
+        return "";
+    }
+    const parts = [];
+    if (strat.when) {
+        parts.push(String(strat.when));
+    }
+    if (strat.target) {
+        parts.push(String(strat.target));
+    }
+    if (strat.rules) {
+        parts.push(String(strat.rules));
+    }
+    return parts.join("\n\n");
+}
+
+/**
+ * Read-only deck for one roster, own or opponent.
+ * Rows show name and CP. ``openKey`` reveals that stratagem's text.
+ */
+export function stratagemDeckView(roster, openKey) {
+    const list = (roster && roster.stratagems) || [];
+    const rows = list.map((strat) => {
+        const key = stratagemKey(strat);
+        const open = !!openKey && openKey === key;
+        return {
+            key,
+            name: strat.name || "",
+            cp: strat.cp,
+            cpLabel: stratagemCpLabel(strat.cp),
+            open,
+            text: open ? stratagemBody(strat) : "",
+        };
+    });
+    const message = rows.length
+        ? ""
+        : (roster && roster.stratagem_message) || NO_DECK_MESSAGE;
+    return { rows, message, empty: rows.length === 0 };
+}
+
 export function createInitialState(initialJoinToken = "") {
     return {
         screen: "home",
@@ -774,6 +852,15 @@ export function createInitialState(initialJoinToken = "") {
         rosters: [],
         rosterDetail: null,
         rosterDetailPaneMode: "units",
+        rosterDetailOpenStratagem: null,
+        ownStratagems: [],
+        oppStratagems: [],
+        ownStratagemMessage: "",
+        oppStratagemMessage: "",
+        ownDetachmentName: "",
+        oppDetachmentName: "",
+        ownOpenStratagem: null,
+        oppOpenStratagem: null,
         missions: [],
         importPreview: null,
         create: {
