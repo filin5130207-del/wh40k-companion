@@ -601,6 +601,93 @@ check("rememberJoinToken / clear", () => {
     assert.equal(mem.has("wh40k_join"), false);
 });
 
+const sampleDeck = [
+    {
+        name: "Get Stuck In",
+        cp: 1,
+        when: "Fight phase",
+        target: "One friendly unit",
+        rules: "Test rules text.",
+        detachment: "Waaaagh! Tribe",
+    },
+    {
+        name: "More Dakka",
+        cp: 2,
+        when: "Shooting phase",
+        target: "One enemy unit",
+        rules: "Another text.",
+        detachment: "Waaaagh! Tribe",
+    },
+];
+
+function assertDeckOpensAndCloses(roster, label) {
+    let open = null;
+    let view = mod.stratagemDeckView(roster, open);
+    assert.equal(view.empty, false, label);
+    assert.equal(view.rows.length, 2, label);
+    assert.equal(view.rows[0].name, "Get Stuck In");
+    assert.equal(view.rows[0].cpLabel, "1 CP");
+    assert.equal(view.rows[1].cpLabel, "2 CP");
+    assert.equal(view.rows[0].text, "");
+    assert.equal(view.rows[0].open, false);
+    open = mod.toggleOpenStratagem(open, sampleDeck[0]);
+    view = mod.stratagemDeckView(roster, open);
+    assert.equal(view.rows[0].open, true, label);
+    assert.match(view.rows[0].text, /Fight phase/);
+    assert.match(view.rows[0].text, /One friendly unit/);
+    assert.match(view.rows[0].text, /Test rules text/);
+    assert.equal(view.rows[1].open, false);
+    assert.equal(view.rows[1].text, "");
+    open = mod.toggleOpenStratagem(open, sampleDeck[0]);
+    view = mod.stratagemDeckView(roster, open);
+    assert.equal(view.rows[0].open, false, label);
+    assert.equal(view.rows[0].text, "");
+}
+
+check("own roster lists stratagems and opens then closes the text", () => {
+    assertDeckOpensAndCloses(
+        { stratagems: sampleDeck, stratagem_message: "" },
+        "own"
+    );
+});
+
+check("opponent roster lists stratagems and opens then closes the text", () => {
+    assertDeckOpensAndCloses(
+        { stratagems: sampleDeck, stratagem_message: "" },
+        "opponent"
+    );
+});
+
+check("unknown detachment deck is empty with the no-deck message", () => {
+    const view = mod.stratagemDeckView(
+        { stratagems: [], stratagem_message: mod.NO_DECK_MESSAGE },
+        null
+    );
+    assert.equal(view.empty, true);
+    assert.equal(view.rows.length, 0);
+    assert.equal(view.message, "no deck for this detachment");
+});
+
+check("stratagem and rules panes toggle back to the unit list", () => {
+    assert.equal(mod.togglePaneMode("units", "stratagems"), "stratagems");
+    assert.equal(mod.togglePaneMode("stratagems", "stratagems"), "units");
+    assert.equal(mod.togglePaneMode("stratagems", "rules"), "rules");
+    assert.equal(mod.togglePaneMode("rules", "rules"), "units");
+    assert.equal(mod.paneHeading("stratagems"), "Стратагемы");
+});
+
+check("stratagem buttons sit next to Правила for own roster, opponent, and roster detail", () => {
+    const xml = readFileSync(join(here, "../src/pwa/companion_templates.xml"), "utf8");
+    assert.equal((xml.match(/Стратагемы/g) || []).length >= 3, true);
+    assert.ok(xml.includes("setPaneMode('own', 'stratagems')"));
+    assert.ok(xml.includes("setPaneMode('opp', 'stratagems')"));
+    assert.ok(xml.includes("setPaneMode('roster', 'stratagems')"));
+    assert.ok(xml.includes("stratagemsFor('own')"));
+    assert.ok(xml.includes("stratagemsFor('opp')"));
+    assert.ok(xml.includes("stratagemsFor('roster')"));
+    assert.equal(xml.includes("wh40k-stratagem-used"), false);
+});
+
 rmSync(dir, { recursive: true, force: true });
 
 if (failed) {

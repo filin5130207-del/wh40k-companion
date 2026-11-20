@@ -167,24 +167,34 @@
             </div>
             <button type="button" class="wh40k-btn" t-on-click="this.closeRosterDetail">Назад</button>
         </div>
-        <p class="wh40k-swipe-hint">Как в матче: список юнитов и даташит по нажатию. Иконка § переключает юниты / правила армии. Без -W / -M / Destroy.</p>
+        <p class="wh40k-swipe-hint">Как в матче: список юнитов и даташит по нажатию. «Правила» и «Стратагемы» только для просмотра. Без -W / -M / Destroy.</p>
     </section>
 
     <section class="wh40k-panel wh40k-roster-detail-pane" t-if="this.state.rosterDetail">
         <div class="wh40k-side-title">
             <div class="wh40k-pane-heading">
-                <h3 style="margin:0;" t-out="this.state.rosterDetailPaneMode === 'rules' ? 'Правила армии' : 'Юниты'"/>
+                <h3 style="margin:0;" t-out="this.rosterDetailHeading()"/>
                 <span class="wh40k-muted">Просмотр ростера</span>
             </div>
-            <button type="button"
-                    class="wh40k-btn wh40k-rules-toggle"
-                    t-att-class="{'active': this.state.rosterDetailPaneMode === 'rules'}"
-                    t-att-aria-pressed="this.state.rosterDetailPaneMode === 'rules' ? 'true' : 'false'"
-                    t-att-title="this.state.rosterDetailPaneMode === 'rules' ? 'Показать ростер' : 'Правила армии'"
-                    t-on-click="this.toggleRosterDetailPaneMode">
-                <span class="wh40k-rules-icon" aria-hidden="true">§</span>
-                <span t-out="this.state.rosterDetailPaneMode === 'rules' ? 'Ростер' : 'Правила'"/>
-            </button>
+            <div class="wh40k-pane-actions">
+                <button type="button"
+                        class="wh40k-btn wh40k-rules-toggle"
+                        t-att-class="{'active': this.state.rosterDetailPaneMode === 'rules'}"
+                        t-att-aria-pressed="this.state.rosterDetailPaneMode === 'rules' ? 'true' : 'false'"
+                        t-att-title="this.state.rosterDetailPaneMode === 'rules' ? 'Показать ростер' : 'Правила армии'"
+                        t-on-click="this.toggleRosterDetailPaneMode">
+                    <span class="wh40k-rules-icon" aria-hidden="true">§</span>
+                    <span t-out="this.state.rosterDetailPaneMode === 'rules' ? 'Ростер' : 'Правила'"/>
+                </button>
+                <button type="button"
+                        class="wh40k-btn wh40k-rules-toggle wh40k-stratagems-toggle"
+                        t-att-class="{'active': this.state.rosterDetailPaneMode === 'stratagems'}"
+                        t-att-aria-pressed="this.state.rosterDetailPaneMode === 'stratagems' ? 'true' : 'false'"
+                        title="Стратагемы"
+                        t-on-click="() => this.setPaneMode('roster', 'stratagems')">
+                    <span>Стратагемы</span>
+                </button>
+            </div>
         </div>
 
         <t t-if="this.state.rosterDetailPaneMode === 'rules'">
@@ -197,6 +207,27 @@
                     </div>
                 </t>
                 <p t-if="!this.rosterDetailRules.length" class="wh40k-muted">Нет army/detachment правил для этого ростера.</p>
+            </div>
+        </t>
+        <t t-elif="this.state.rosterDetailPaneMode === 'stratagems'">
+            <div class="wh40k-pane-rules wh40k-pane-stratagems">
+                <p t-if="this.detachmentLabelFor('roster')" class="wh40k-muted" t-out="this.detachmentLabelFor('roster')"/>
+                <t t-foreach="this.stratagemsFor('roster')" t-as="strat" t-key="'rd-' + strat.detachment + '-' + strat.name">
+                    <button type="button"
+                            class="wh40k-btn wh40k-stratagem"
+                            t-att-class="{'open': this.isStratagemOpen('roster', strat)}"
+                            t-att-aria-expanded="this.isStratagemOpen('roster', strat) ? 'true' : 'false'"
+                            t-on-click="() => this.toggleStratagem('roster', strat)">
+                        <span class="wh40k-stratagem-head">
+                            <span class="wh40k-stratagem-name" t-out="strat.name"/>
+                            <span class="wh40k-muted" t-out="this.stratagemCpLabel(strat.cp)"/>
+                        </span>
+                        <span t-if="this.isStratagemOpen('roster', strat)"
+                              class="wh40k-stratagem-body"
+                              t-out="this.stratagemBody(strat)"/>
+                    </button>
+                </t>
+                <p t-if="!this.stratagemsFor('roster').length" class="wh40k-muted" t-out="this.stratagemMessageFor('roster')"/>
             </div>
         </t>
         <t t-else="">
@@ -471,15 +502,25 @@
                             <h3 style="margin:0;" t-out="this.ownSideLabel"/>
                             <span class="wh40k-muted">Вы</span>
                         </div>
-                        <button type="button"
-                                class="wh40k-btn wh40k-rules-toggle"
-                                t-att-class="{'active': this.state.ownPaneMode === 'rules'}"
-                                t-att-aria-pressed="this.state.ownPaneMode === 'rules' ? 'true' : 'false'"
-                                t-att-title="this.state.ownPaneMode === 'rules' ? 'Показать ростер' : 'Правила армии'"
-                                t-on-click="this.toggleOwnPaneMode">
-                            <span class="wh40k-rules-icon" aria-hidden="true">§</span>
-                            <span t-out="this.state.ownPaneMode === 'rules' ? 'Ростер' : 'Правила'"/>
-                        </button>
+                        <div class="wh40k-pane-actions">
+                            <button type="button"
+                                    class="wh40k-btn wh40k-rules-toggle"
+                                    t-att-class="{'active': this.state.ownPaneMode === 'rules'}"
+                                    t-att-aria-pressed="this.state.ownPaneMode === 'rules' ? 'true' : 'false'"
+                                    t-att-title="this.state.ownPaneMode === 'rules' ? 'Показать ростер' : 'Правила армии'"
+                                    t-on-click="this.toggleOwnPaneMode">
+                                <span class="wh40k-rules-icon" aria-hidden="true">§</span>
+                                <span t-out="this.state.ownPaneMode === 'rules' ? 'Ростер' : 'Правила'"/>
+                            </button>
+                            <button type="button"
+                                    class="wh40k-btn wh40k-rules-toggle wh40k-stratagems-toggle"
+                                    t-att-class="{'active': this.state.ownPaneMode === 'stratagems'}"
+                                    t-att-aria-pressed="this.state.ownPaneMode === 'stratagems' ? 'true' : 'false'"
+                                    title="Стратагемы"
+                                    t-on-click="() => this.setPaneMode('own', 'stratagems')">
+                                <span>Стратагемы</span>
+                            </button>
+                        </div>
                     </div>
 
                     <t t-if="this.state.ownPaneMode === 'rules'">
@@ -492,6 +533,27 @@
                                 </div>
                             </t>
                             <p t-if="!this.ownRules.length" class="wh40k-muted">Нет army/detachment правил для вашего ростера.</p>
+                        </div>
+                    </t>
+                    <t t-elif="this.state.ownPaneMode === 'stratagems'">
+                        <div class="wh40k-pane-rules wh40k-pane-stratagems">
+                            <p t-if="this.detachmentLabelFor('own')" class="wh40k-muted" t-out="this.detachmentLabelFor('own')"/>
+                            <t t-foreach="this.stratagemsFor('own')" t-as="strat" t-key="'own-' + strat.detachment + '-' + strat.name">
+                                <button type="button"
+                                        class="wh40k-btn wh40k-stratagem"
+                                        t-att-class="{'open': this.isStratagemOpen('own', strat)}"
+                                        t-att-aria-expanded="this.isStratagemOpen('own', strat) ? 'true' : 'false'"
+                                        t-on-click="() => this.toggleStratagem('own', strat)">
+                                    <span class="wh40k-stratagem-head">
+                                        <span class="wh40k-stratagem-name" t-out="strat.name"/>
+                                        <span class="wh40k-muted" t-out="this.stratagemCpLabel(strat.cp)"/>
+                                    </span>
+                                    <span t-if="this.isStratagemOpen('own', strat)"
+                                          class="wh40k-stratagem-body"
+                                          t-out="this.stratagemBody(strat)"/>
+                                </button>
+                            </t>
+                            <p t-if="!this.stratagemsFor('own').length" class="wh40k-muted" t-out="this.stratagemMessageFor('own')"/>
                         </div>
                     </t>
                     <t t-else="">
@@ -508,15 +570,25 @@
                             <h3 style="margin:0;" t-out="this.oppSideLabel"/>
                             <span class="wh40k-muted">Противник</span>
                         </div>
-                        <button type="button"
-                                class="wh40k-btn wh40k-rules-toggle"
-                                t-att-class="{'active': this.state.oppPaneMode === 'rules'}"
-                                t-att-aria-pressed="this.state.oppPaneMode === 'rules' ? 'true' : 'false'"
-                                t-att-title="this.state.oppPaneMode === 'rules' ? 'Показать ростер' : 'Правила армии противника'"
-                                t-on-click="this.toggleOppPaneMode">
-                            <span class="wh40k-rules-icon" aria-hidden="true">§</span>
-                            <span t-out="this.state.oppPaneMode === 'rules' ? 'Ростер' : 'Правила'"/>
-                        </button>
+                        <div class="wh40k-pane-actions">
+                            <button type="button"
+                                    class="wh40k-btn wh40k-rules-toggle"
+                                    t-att-class="{'active': this.state.oppPaneMode === 'rules'}"
+                                    t-att-aria-pressed="this.state.oppPaneMode === 'rules' ? 'true' : 'false'"
+                                    t-att-title="this.state.oppPaneMode === 'rules' ? 'Показать ростер' : 'Правила армии противника'"
+                                    t-on-click="this.toggleOppPaneMode">
+                                <span class="wh40k-rules-icon" aria-hidden="true">§</span>
+                                <span t-out="this.state.oppPaneMode === 'rules' ? 'Ростер' : 'Правила'"/>
+                            </button>
+                            <button type="button"
+                                    class="wh40k-btn wh40k-rules-toggle wh40k-stratagems-toggle"
+                                    t-att-class="{'active': this.state.oppPaneMode === 'stratagems'}"
+                                    t-att-aria-pressed="this.state.oppPaneMode === 'stratagems' ? 'true' : 'false'"
+                                    title="Стратагемы противника"
+                                    t-on-click="() => this.setPaneMode('opp', 'stratagems')">
+                                <span>Стратагемы</span>
+                            </button>
+                        </div>
                     </div>
 
                     <t t-if="this.state.oppPaneMode === 'rules'">
@@ -529,6 +601,27 @@
                                 </div>
                             </t>
                             <p t-if="!this.oppRules.length" class="wh40k-muted">Нет army/detachment правил у противника.</p>
+                        </div>
+                    </t>
+                    <t t-elif="this.state.oppPaneMode === 'stratagems'">
+                        <div class="wh40k-pane-rules wh40k-pane-stratagems">
+                            <p t-if="this.detachmentLabelFor('opp')" class="wh40k-muted" t-out="this.detachmentLabelFor('opp')"/>
+                            <t t-foreach="this.stratagemsFor('opp')" t-as="strat" t-key="'opp-' + strat.detachment + '-' + strat.name">
+                                <button type="button"
+                                        class="wh40k-btn wh40k-stratagem"
+                                        t-att-class="{'open': this.isStratagemOpen('opp', strat)}"
+                                        t-att-aria-expanded="this.isStratagemOpen('opp', strat) ? 'true' : 'false'"
+                                        t-on-click="() => this.toggleStratagem('opp', strat)">
+                                    <span class="wh40k-stratagem-head">
+                                        <span class="wh40k-stratagem-name" t-out="strat.name"/>
+                                        <span class="wh40k-muted" t-out="this.stratagemCpLabel(strat.cp)"/>
+                                    </span>
+                                    <span t-if="this.isStratagemOpen('opp', strat)"
+                                          class="wh40k-stratagem-body"
+                                          t-out="this.stratagemBody(strat)"/>
+                                </button>
+                            </t>
+                            <p t-if="!this.stratagemsFor('opp').length" class="wh40k-muted" t-out="this.stratagemMessageFor('opp')"/>
                         </div>
                     </t>
                     <t t-else="">

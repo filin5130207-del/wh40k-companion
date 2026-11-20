@@ -44,6 +44,14 @@ import {
     joinFailureLeavesScreen,
     applyHostCancel,
     matchResultHeadline,
+    NO_DECK_MESSAGE,
+    togglePaneMode,
+    paneHeading,
+    stratagemKey,
+    toggleOpenStratagem,
+    stratagemCpLabel,
+    stratagemBody,
+    stratagemDeckView,
     UNDO_STACK_LIMIT,
 } from "./battle_helpers";
 
@@ -90,6 +98,14 @@ export {
     joinFailureLeavesScreen,
     applyHostCancel,
     matchResultHeadline,
+    NO_DECK_MESSAGE,
+    togglePaneMode,
+    paneHeading,
+    stratagemKey,
+    toggleOpenStratagem,
+    stratagemCpLabel,
+    stratagemBody,
+    stratagemDeckView,
     UNDO_STACK_LIMIT,
 };
 
