@@ -37,6 +37,13 @@ import {
     joinFailureLeavesScreen,
     applyHostCancel,
     matchResultHeadline,
+    NO_DECK_MESSAGE,
+    togglePaneMode,
+    paneHeading,
+    stratagemKey,
+    toggleOpenStratagem,
+    stratagemCpLabel,
+    stratagemBody,
     UNDO_STACK_LIMIT,
 } from "./battle_store";
 import { createMatchBus } from "./bus_client";
@@ -420,6 +427,13 @@ export class Wh40kCompanionApp extends Component {
         }
         if (next !== "roster_detail") {
             this.state.rosterDetailPaneMode = "units";
+            this.state.rosterDetailOpenStratagem = null;
+        }
+        if (next !== "game") {
+            this.state.ownPaneMode = "units";
+            this.state.oppPaneMode = "units";
+            this.state.ownOpenStratagem = null;
+            this.state.oppOpenStratagem = null;
         }
     }
 
@@ -431,6 +445,7 @@ export class Wh40kCompanionApp extends Component {
             this.state.busy = true;
             this.state.datasheet = null;
             this.state.rosterDetailPaneMode = "units";
+            this.state.rosterDetailOpenStratagem = null;
             const data = await this.rpc(`${API}/roster/${rosterId}/detail`);
             const roster = data.roster || null;
             this.state.rosterDetail = roster;
@@ -448,12 +463,119 @@ export class Wh40kCompanionApp extends Component {
     closeRosterDetail() {
         this.state.datasheet = null;
         this.state.rosterDetailPaneMode = "units";
+        this.state.rosterDetailOpenStratagem = null;
         this.setScreen("rosters");
     }
 
+    rosterDetailHeading() {
+        return paneHeading(this.state.rosterDetailPaneMode);
+    }
+
+    setPaneMode(surface, target) {
+        const current =
+            surface === "own"
+                ? this.state.ownPaneMode
+                : surface === "opp"
+                  ? this.state.oppPaneMode
+                  : this.state.rosterDetailPaneMode;
+        const next = togglePaneMode(current, target);
+        if (surface === "own") {
+            this.state.ownPaneMode = next;
+            if (next !== "stratagems") {
+                this.state.ownOpenStratagem = null;
+            }
+        } else if (surface === "opp") {
+            this.state.oppPaneMode = next;
+            if (next !== "stratagems") {
+                this.state.oppOpenStratagem = null;
+            }
+        } else {
+            this.state.rosterDetailPaneMode = next;
+            if (next !== "stratagems") {
+                this.state.rosterDetailOpenStratagem = null;
+            }
+        }
+    }
+
     toggleRosterDetailPaneMode() {
-        this.state.rosterDetailPaneMode =
-            this.state.rosterDetailPaneMode === "rules" ? "units" : "rules";
+        this.setPaneMode("roster", "rules");
+    }
+
+    stratagemsFor(scope) {
+        if (scope === "own") {
+            return this.state.ownStratagems || [];
+        }
+        if (scope === "opp") {
+            return this.state.oppStratagems || [];
+        }
+        return (this.state.rosterDetail && this.state.rosterDetail.stratagems) || [];
+    }
+
+    stratagemMessageFor(scope) {
+        if (this.stratagemsFor(scope).length) {
+            return "";
+        }
+        if (scope === "own") {
+            return this.state.ownStratagemMessage || NO_DECK_MESSAGE;
+        }
+        if (scope === "opp") {
+            return this.state.oppStratagemMessage || NO_DECK_MESSAGE;
+        }
+        const roster = this.state.rosterDetail;
+        return (roster && roster.stratagem_message) || NO_DECK_MESSAGE;
+    }
+
+    detachmentLabelFor(scope) {
+        let raw = "";
+        if (scope === "own") {
+            raw = this.state.ownDetachmentName || "";
+        } else if (scope === "opp") {
+            raw = this.state.oppDetachmentName || "";
+        } else {
+            raw = (this.state.rosterDetail && this.state.rosterDetail.detachment_name) || "";
+        }
+        const names = String(raw)
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean);
+        return names.length ? `Детачмент: ${names.join(", ")}` : "";
+    }
+
+    stratagemKey(strat) {
+        return stratagemKey(strat);
+    }
+
+    stratagemCpLabel(cp) {
+        return stratagemCpLabel(cp);
+    }
+
+    stratagemBody(strat) {
+        return stratagemBody(strat);
+    }
+
+    _openKeyFor(scope) {
+        if (scope === "own") {
+            return this.state.ownOpenStratagem;
+        }
+        if (scope === "opp") {
+            return this.state.oppOpenStratagem;
+        }
+        return this.state.rosterDetailOpenStratagem;
+    }
+
+    isStratagemOpen(scope, strat) {
+        return this._openKeyFor(scope) === stratagemKey(strat);
+    }
+
+    toggleStratagem(scope, strat) {
+        const next = toggleOpenStratagem(this._openKeyFor(scope), strat);
+        if (scope === "own") {
+            this.state.ownOpenStratagem = next;
+        } else if (scope === "opp") {
+            this.state.oppOpenStratagem = next;
+        } else {
+            this.state.rosterDetailOpenStratagem = next;
+        }
     }
 
     openManualJoin() {
@@ -1309,6 +1431,14 @@ export class Wh40kCompanionApp extends Component {
         };
         this.state.ownPaneMode = "units";
         this.state.oppPaneMode = "units";
+        this.state.ownOpenStratagem = null;
+        this.state.oppOpenStratagem = null;
+        this.state.ownStratagems = [];
+        this.state.oppStratagems = [];
+        this.state.ownStratagemMessage = "";
+        this.state.oppStratagemMessage = "";
+        this.state.ownDetachmentName = "";
+        this.state.oppDetachmentName = "";
         this.state.gameSide = "own";
         this._swipeStartX = null;
         this._swipeStartY = null;
@@ -1327,11 +1457,18 @@ export class Wh40kCompanionApp extends Component {
             this._rosterCache[ownRosterId] = detail.roster;
             this.state.ownRules = detail.roster?.rules || [];
             this.state.rules = this.state.ownRules;
+            this.state.ownStratagems = detail.roster?.stratagems || [];
+            this.state.ownStratagemMessage = detail.roster?.stratagem_message || "";
+            this.state.ownDetachmentName = detail.roster?.detachment_name || "";
         }
         if (oppRosterId) {
             const other = await this.rpc(`${API}/roster/${oppRosterId}/detail`);
             this._rosterCache[oppRosterId] = other.roster;
             this.state.oppRules = other.roster?.rules || [];
+            // The opponent's deck is not in this payload and is not kept client-side.
+            this.state.oppStratagems = [];
+            this.state.oppStratagemMessage = "";
+            this.state.oppDetachmentName = "";
         }
         this.setScreen("game");
     }
@@ -1380,11 +1517,11 @@ export class Wh40kCompanionApp extends Component {
     }
 
     toggleOwnPaneMode() {
-        this.state.ownPaneMode = this.state.ownPaneMode === "rules" ? "units" : "rules";
+        this.setPaneMode("own", "rules");
     }
 
     toggleOppPaneMode() {
-        this.state.oppPaneMode = this.state.oppPaneMode === "rules" ? "units" : "rules";
+        this.setPaneMode("opp", "rules");
     }
 
     _undoKey(unit) {

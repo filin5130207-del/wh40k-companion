@@ -601,6 +601,88 @@ check("rememberJoinToken / clear", () => {
     assert.equal(mem.has("wh40k_join"), false);
 });
 
+const sampleDeck = [
+    {
+        name: "Get Stuck In",
+        type: "Battle Tactic",
+        cp: 1,
+        when: "Fight phase",
+        target: "One friendly unit",
+        rules: "Test rules text.",
+    },
+    {
+        name: "More Dakka",
+        type: "Strategic Ploy",
+        cp: 2,
+        rules: "Another text.",
+    },
+];
+
+check("own roster lists name and CP and opens the type", () => {
+    const roster = { stratagems: sampleDeck, stratagem_message: "" };
+    let open = null;
+    let view = mod.stratagemDeckView(roster, open);
+    assert.equal(view.empty, false);
+    assert.equal(view.rows[0].name, "Get Stuck In");
+    assert.equal(view.rows[0].cpLabel, "1 CP");
+    assert.equal(view.rows[0].text, "");
+    open = mod.toggleOpenStratagem(open, sampleDeck[0]);
+    view = mod.stratagemDeckView(roster, open);
+    assert.equal(view.rows[0].open, true);
+    assert.equal(view.rows[0].text, "Battle Tactic");
+    assert.equal(view.rows[0].text.includes("Fight phase"), false);
+    assert.equal(view.rows[0].text.includes("Test rules text."), false);
+    open = mod.toggleOpenStratagem(open, sampleDeck[0]);
+    view = mod.stratagemDeckView(roster, open);
+    assert.equal(view.rows[0].open, false);
+    assert.equal(view.rows[0].text, "");
+    const fields = mod.viewerStratagemFields(roster, true);
+    assert.deepEqual(Object.keys(fields.stratagems[0]).sort(), ["cp", "name", "type"]);
+    assert.equal(fields.stratagems[0].rules, undefined);
+    assert.equal(fields.stratagem_message, "");
+});
+
+check("opponent match payload has no stratagem deck", () => {
+    const fields = mod.viewerStratagemFields(
+        { stratagems: sampleDeck, stratagem_message: "no deck for this detachment" },
+        false
+    );
+    assert.deepEqual(fields, {});
+    assert.equal(Object.hasOwn(fields, "stratagems"), false);
+    assert.equal(Object.hasOwn(fields, "stratagem_message"), false);
+});
+
+check("unknown detachment deck is empty with the no-deck message", () => {
+    const view = mod.stratagemDeckView(
+        { stratagems: [], stratagem_message: mod.NO_DECK_MESSAGE },
+        null
+    );
+    assert.equal(view.empty, true);
+    assert.equal(view.rows.length, 0);
+    assert.equal(view.message, "no deck for this detachment");
+});
+
+check("stratagem and rules panes toggle back to the unit list", () => {
+    assert.equal(mod.togglePaneMode("units", "stratagems"), "stratagems");
+    assert.equal(mod.togglePaneMode("stratagems", "stratagems"), "units");
+    assert.equal(mod.togglePaneMode("stratagems", "rules"), "rules");
+    assert.equal(mod.togglePaneMode("rules", "rules"), "units");
+    assert.equal(mod.paneHeading("stratagems"), "Стратагемы");
+});
+
+check("stratagem button is on the owner's panes and not the opponent pane", () => {
+    const xml = readFileSync(join(here, "../src/pwa/companion_templates.xml"), "utf8");
+    const opp = xml.split('data-pane="opponent"')[1] || "";
+    assert.ok(xml.includes("setPaneMode('own', 'stratagems')"));
+    assert.ok(xml.includes("setPaneMode('roster', 'stratagems')"));
+    assert.ok(xml.includes("stratagemsFor('own')"));
+    assert.ok(xml.includes("stratagemsFor('roster')"));
+    assert.equal(opp.includes("Стратагемы"), false);
+    assert.equal(opp.includes("stratagemsFor"), false);
+    assert.equal(xml.includes("setPaneMode('opp', 'stratagems')"), false);
+    assert.equal(xml.includes("wh40k-stratagem-used"), false);
+});
+
 rmSync(dir, { recursive: true, force: true });
 
 if (failed) {

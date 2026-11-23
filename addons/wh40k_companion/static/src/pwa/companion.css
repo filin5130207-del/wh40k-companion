@@ -515,8 +515,50 @@
     color: var(--wh40k-accent-2);
 }
 
+.wh40k-pane-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
 .wh40k-pane-rules {
     animation: wh40k-fade 0.2s ease-out;
+}
+
+.wh40k-stratagem {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    margin-bottom: 0.4rem;
+    text-align: left;
+}
+
+.wh40k-stratagem-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    width: 100%;
+}
+
+.wh40k-stratagem-name {
+    font-weight: 700;
+}
+
+.wh40k-stratagem.open {
+    border-color: var(--wh40k-accent-2);
+    background: rgba(61, 139, 110, 0.18);
+}
+
+.wh40k-stratagem-body {
+    display: block;
+    margin-top: 0.45rem;
+    white-space: pre-wrap;
+    font-weight: 400;
+    color: var(--wh40k-muted);
 }
 
 .wh40k-rule-block {

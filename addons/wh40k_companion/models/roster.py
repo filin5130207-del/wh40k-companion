@@ -1,6 +1,11 @@
 from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError
 
+from odoo.addons.wh40k_companion.catalogues.stratagems import (
+    resolve_stratagem_deck,
+    stratagem_fields_for_viewer,
+)
+
 
 class Wh40kRoster(models.Model):
     _name = "wh40k.roster"
@@ -21,6 +26,9 @@ class Wh40kRoster(models.Model):
         ondelete="cascade",
     )
     force_ids = fields.One2many("wh40k.force", "roster_id", string="Forces")
+    # Selected detachment names from the roster file, one per line. Stratagem
+    # text is not copied here; the deck is resolved from the static catalogue.
+    detachment_name = fields.Text(string="Detachment")
     # Stored so list/dashboard reads the columns. Depends stay on the tree so a
     # weapon/unit edit recomputes only the affected rosters, not every match.
     unit_count = fields.Integer(compute="_compute_counts", store=True)
@@ -119,9 +127,10 @@ class Wh40kRoster(models.Model):
         self.ensure_one()
         partner = partner or self.env.user.partner_id
         self.check_detail_access(partner)
+        viewer_owns_roster = self.partner_id.id == partner.id
         # Opponent may lack ACL on foreign roster rows; serialize after explicit check.
         roster = self
-        if roster.partner_id.id != partner.id:
+        if not viewer_owns_roster:
             roster = self.sudo()
         units = []
         rules = []
@@ -199,14 +208,48 @@ class Wh40kRoster(models.Model):
                             "models": models_payload,
                         }
                     )
-        return {
+        payload = {
             "id": roster.id,
             "name": roster.name,
             "points_used": roster.points_used,
             "points_limit": roster.points_limit,
+            "detachment_name": roster.detachment_name or "",
             "units": units,
             "rules": rules,
         }
+        # The match screen loads this dict for both rosters. Only the owner
+        # receives a stratagem deck; the opponent's payload omits it entirely.
+        if viewer_owns_roster:
+            deck = resolve_stratagem_deck(roster._detachment_catalogue_pairs())
+            payload.update(stratagem_fields_for_viewer(deck, True))
+        return payload
+
+    def _detachment_catalogue_pairs(self):
+        """``(catalogue name, detachment name)`` for each selected detachment.
+
+        Names come from ``detachment_name`` (the import binding). The catalogue
+        is the force that owns a detachment row with that name. Stratagem
+        bodies are not read from those rows.
+        """
+        self.ensure_one()
+        names = [
+            line.strip()
+            for line in (self.detachment_name or "").splitlines()
+            if line.strip()
+        ]
+        if not names:
+            return []
+        name_to_catalogue = {}
+        for force in self.force_ids:
+            catalogue = (force.catalogue_name or "").strip()
+            for det in force.detachment_ids:
+                det_name = (det.name or "").strip()
+                if det_name and det_name not in name_to_catalogue:
+                    name_to_catalogue[det_name] = catalogue
+        first_catalogue = ""
+        if self.force_ids:
+            first_catalogue = (self.force_ids[:1].catalogue_name or "").strip()
+        return [(name_to_catalogue.get(name, first_catalogue), name) for name in names]
 
     @api.model
     def _create_owned_rules(self, rules, owner_id):
@@ -371,6 +414,11 @@ class Wh40kRoster(models.Model):
         force_cmds = roster_model._force_commands_from_parsed(
             parsed, owner_partner=partner
         )
+        detachment_names = [
+            name.strip()
+            for name in (parsed.get("detachment_names") or [])
+            if (name or "").strip()
+        ]
         return roster_model.create(
             {
                 "name": parsed["name"],
@@ -378,6 +426,7 @@ class Wh40kRoster(models.Model):
                 "points_limit": parsed.get("points_limit") or 2000,
                 "points_used": parsed.get("points_used") or 0,
                 "partner_id": partner.id,
+                "detachment_name": "\n".join(detachment_names),
                 "force_ids": force_cmds,
             }
         )

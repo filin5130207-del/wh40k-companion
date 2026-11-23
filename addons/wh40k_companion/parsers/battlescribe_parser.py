@@ -55,6 +55,38 @@ def _walk_selections(selections: list | None):
         yield from _walk_selections(sel.get("selections"))
 
 
+def _selection_number(selection: dict) -> float | None:
+    if "number" not in selection or selection.get("number") is None:
+        return None
+    try:
+        return float(selection.get("number"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_selected_entry(selection: dict) -> bool:
+    """Taken when ``number`` is omitted or greater than zero.
+
+    ``number`` 0 is an option listed under the node that the player did not
+    take. Older exports and the compact fixtures omit ``number``; those count
+    as taken.
+    """
+    number = _selection_number(selection)
+    if number is None:
+        return True
+    return number > 0
+
+
+def _is_detachment_choice(selection: dict) -> bool:
+    """A Detachment-group child, not a nested unit, rule, or other group."""
+    if selection.get("type") in ("unit", "model"):
+        return False
+    group = (selection.get("group") or "").strip().lower()
+    if group and group != "detachment":
+        return False
+    return bool((selection.get("name") or "").strip())
+
+
 class BattlescribeParser:
     """Parse a NewRecruit/Battlescribe roster JSON into nested dicts ready for ORM create."""
 
@@ -74,14 +106,20 @@ class BattlescribeParser:
         points_limit = _pts(limits) or points_used or 2000
 
         forces = []
+        detachment_names = []
         for force in node.get("forces") or []:
-            forces.append(self._parse_force(force))
+            parsed_force = self._parse_force(force)
+            forces.append(parsed_force)
+            for det in parsed_force.get("detachments") or []:
+                if det.get("selected") and (det.get("name") or "").strip():
+                    detachment_names.append(det["name"].strip())
 
         return {
             "name": node.get("name") or "Imported Roster",
             "game_system": node.get("gameSystemName") or "",
             "points_limit": points_limit,
             "points_used": points_used,
+            "detachment_names": detachment_names,
             "forces": forces,
         }
 
@@ -147,13 +185,15 @@ class BattlescribeParser:
             )
 
         detachments = self._extract_detachments(force)
-        # Fallback: if no detachment found, put all units under a default detachment
+        # Fallback: if no detachment was taken, keep units under a placeholder.
+        # It is not a selected detachment, so the stratagem deck stays empty.
         if not detachments:
             detachments = [
                 {
                     "name": "Army",
                     "rules": [],
                     "units": self._extract_units_from_selections(force.get("selections") or []),
+                    "selected": False,
                 }
             ]
 
@@ -165,11 +205,18 @@ class BattlescribeParser:
         }
 
     def _extract_detachments(self, force: dict) -> list[dict]:
-        """Find Detachment configuration upgrades and attach army units to them.
+        """Find taken Detachment entries and attach army units to the first.
 
-        NewRecruit often lists multiple detachment options under a Configuration
-        selection named ``Detachment``. The first selected named detachment is
-        treated as primary; units live as siblings under the force selections.
+        The Detachment configuration node lists the detachments the player
+        took. A child counts only when it is a detachment choice and
+        ``number`` is omitted or greater than zero. ``number`` 0 stays off
+        the roster. Rule names and category names under a child are not
+        detachment names.
+
+        11th edition spends a Detachment Points budget, so more than one
+        child may be taken. Every taken child is kept, in file order. Units
+        live as siblings under the force and are attached to the first taken
+        detachment.
         """
         detachments_meta: list[dict] = []
         unit_selections: list[dict] = []
@@ -181,6 +228,8 @@ class BattlescribeParser:
                 sel_type == "upgrade" and "detachment" in name.lower()
             ):
                 for child in sel.get("selections") or []:
+                    if not _is_detachment_choice(child) or not _is_selected_entry(child):
+                        continue
                     rules = []
                     for rule in child.get("rules") or []:
                         rules.append(
@@ -203,9 +252,10 @@ class BattlescribeParser:
                             )
                     detachments_meta.append(
                         {
-                            "name": child.get("name") or "Detachment",
+                            "name": (child.get("name") or "Detachment").strip(),
                             "rules": rules,
                             "units": [],
+                            "selected": True,
                         }
                     )
             elif sel_type in ("unit", "model"):
@@ -221,10 +271,7 @@ class BattlescribeParser:
         units = [self._parse_unit(u) for u in unit_selections]
         if not detachments_meta:
             return []
-        # Attach all units to the first detachment (primary choice)
         detachments_meta[0]["units"] = units
-        # Keep additional detachment options as rule-only entries (user may have
-        # multiple selected options in the JSON)
         return detachments_meta
 
     def _extract_units_from_selections(self, selections: list) -> list[dict]:
