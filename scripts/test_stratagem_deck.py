@@ -16,6 +16,7 @@ from catalogues.stratagems import (  # noqa: E402
     NO_DECK_MESSAGE,
     UNSEEDED_DETACHMENTS,
     resolve_stratagem_deck,
+    stratagem_fields_for_viewer,
 )
 from parsers.battlescribe_parser import BattlescribeParser  # noqa: E402
 
@@ -117,11 +118,12 @@ class TestSelectedDetachmentBinding(unittest.TestCase):
             self.assertEqual(deck["message"], NO_DECK_MESSAGE)
             self.assertEqual(deck["missing"], [{"catalogue": catalogue_name, "detachment": detachment_name}])
 
-    def test_known_catalogue_returns_text_without_mutating_the_roster_names(self):
+    def test_public_card_is_name_type_and_cp(self):
         catalogue = {
             ("Orks", "Waaaagh! Tribe"): [
                 {
                     "name": "Get Stuck In",
+                    "type": "Battle Tactic",
                     "cp": 1,
                     "when": "Fight phase",
                     "target": "One friendly unit",
@@ -130,13 +132,23 @@ class TestSelectedDetachmentBinding(unittest.TestCase):
             ]
         }
         deck = resolve_stratagem_deck([("Orks", "Waaaagh! Tribe")], catalogue=catalogue)
-        self.assertEqual(deck["message"], "")
-        self.assertEqual(deck["stratagems"][0]["name"], "Get Stuck In")
-        self.assertEqual(deck["stratagems"][0]["cp"], 1)
-        self.assertIn("Test rules text.", deck["stratagems"][0]["rules"])
-        deck["stratagems"][0]["rules"] = "changed"
+        card = deck["stratagems"][0]
+        self.assertEqual(set(card), {"name", "type", "cp"})
+        self.assertEqual(card["name"], "Get Stuck In")
+        self.assertEqual(card["type"], "Battle Tactic")
+        self.assertEqual(card["cp"], 1)
+        self.assertNotIn("rules", card)
+        self.assertNotIn("when", card)
+        own = stratagem_fields_for_viewer(deck, True)
+        opponent = stratagem_fields_for_viewer(deck, False)
+        self.assertEqual(own["stratagems"], [card])
+        self.assertEqual(own["stratagem_message"], "")
+        self.assertEqual(opponent, {})
+        self.assertNotIn("stratagems", opponent)
+        self.assertNotIn("stratagem_message", opponent)
+        card["name"] = "changed"
         again = resolve_stratagem_deck([("Orks", "Waaaagh! Tribe")], catalogue=catalogue)
-        self.assertEqual(again["stratagems"][0]["rules"], "Test rules text.")
+        self.assertEqual(again["stratagems"][0]["name"], "Get Stuck In")
 
     def test_unknown_detachment_message(self):
         deck = resolve_stratagem_deck([("Orks", "Nope")])

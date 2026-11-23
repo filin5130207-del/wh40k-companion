@@ -1,5 +1,6 @@
-"""Import binding and own/opponent stratagem payloads."""
+"""Import binding and owner-only stratagem payloads."""
 
+import json
 from unittest.mock import patch
 
 from odoo.tests.common import TransactionCase, tagged
@@ -14,15 +15,16 @@ from odoo.addons.wh40k_companion.parsers.battlescribe_parser import Battlescribe
 from .common import Wh40kPlayerMixin, load_sample_roster_json, minimal_roster_json
 
 
-SAMPLE_TEXT = "Test rules text."
+SAMPLE_RULES = "Test rules text."
 SAMPLE_CATALOGUE = {
     ("Orks", "Waaaagh! Tribe"): [
         {
             "name": "Get Stuck In",
+            "type": "Battle Tactic",
             "cp": 1,
             "when": "Fight phase",
             "target": "One friendly unit",
-            "rules": SAMPLE_TEXT,
+            "rules": SAMPLE_RULES,
         }
     ]
 }
@@ -81,23 +83,33 @@ class TestStratagemDeck(Wh40kPlayerMixin, TransactionCase):
             "Nope Detachment",
         )
 
-    def test_own_and_opponent_receive_stratagem_text(self):
+    def test_match_deck_is_private_to_the_owner(self):
         host = self._import_minimal(self.user_a, name="Host Orks")
         guest = self._import_minimal(self.user_b, name="Guest Orks")
-        self.assertEqual(host.detachment_name, "Waaaagh! Tribe")
-        self.assertEqual(guest.detachment_name, "Waaaagh! Tribe")
-        self._activate_match(self.user_a, self.user_b, host, guest)
+        match = self._activate_match(self.user_a, self.user_b, host, guest)
         with patch.dict(stratagems_mod.STRATAGEM_CATALOGUE, SAMPLE_CATALOGUE, clear=False):
             own = host.to_detail_dict(self.user_a.partner_id)
-            as_opponent = host.to_detail_dict(self.user_b.partner_id)
-            opponent_roster = guest.to_detail_dict(self.user_a.partner_id)
-        for payload in (own, as_opponent, opponent_roster):
-            self.assertEqual(payload["stratagem_message"], "")
-            self.assertEqual(len(payload["stratagems"]), 1)
-            row = payload["stratagems"][0]
-            self.assertEqual(row["name"], "Get Stuck In")
-            self.assertEqual(row["cp"], 1)
-            self.assertIn(SAMPLE_TEXT, row["rules"])
-        stored = " ".join((host.force_ids.detachment_ids.detachment_rule_ids).mapped("description"))
-        self.assertNotIn(SAMPLE_TEXT, host.detachment_name or "")
-        self.assertNotIn(SAMPLE_TEXT, stored)
+            host_seen_by_guest = host.to_detail_dict(self.user_b.partner_id)
+            guest_own = guest.to_detail_dict(self.user_b.partner_id)
+            guest_seen_by_host = guest.to_detail_dict(self.user_a.partner_id)
+        self.assertEqual(
+            own["stratagems"],
+            [{"name": "Get Stuck In", "type": "Battle Tactic", "cp": 1}],
+        )
+        self.assertEqual(own["stratagem_message"], "")
+        self.assertNotIn("rules", own["stratagems"][0])
+        self.assertNotIn("when", own["stratagems"][0])
+        self.assertEqual(guest_own["stratagems"], own["stratagems"])
+        for hidden in (host_seen_by_guest, guest_seen_by_host):
+            self.assertNotIn("stratagems", hidden)
+            self.assertNotIn("stratagem_message", hidden)
+            blob = json.dumps(hidden)
+            self.assertNotIn("Get Stuck In", blob)
+            self.assertNotIn(SAMPLE_RULES, blob)
+        for partner in (self.user_a.partner_id, self.user_b.partner_id):
+            state = json.dumps(match.to_state_dict(partner))
+            self.assertNotIn("stratagem", state)
+            self.assertNotIn("Get Stuck In", state)
+        stored = " ".join(host.force_ids.detachment_ids.detachment_rule_ids.mapped("description"))
+        self.assertNotIn(SAMPLE_RULES, host.detachment_name or "")
+        self.assertNotIn(SAMPLE_RULES, stored)

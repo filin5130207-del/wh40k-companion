@@ -794,21 +794,33 @@ export function stratagemCpLabel(cp) {
     return `${cp} CP`;
 }
 
+/** Expanded card shows the stratagem type. Rules prose is never rendered. */
 export function stratagemBody(strat) {
-    if (!strat) {
+    if (!strat || strat.type === null || strat.type === undefined || strat.type === "") {
         return "";
     }
-    const parts = [];
-    if (strat.when) {
-        parts.push(String(strat.when));
+    return String(strat.type);
+}
+
+/**
+ * Match roster payload for one viewer.
+ * The owner gets name, type, and CP. The opponent gets no stratagem keys.
+ */
+export function viewerStratagemFields(roster, isOwner) {
+    if (!isOwner) {
+        return {};
     }
-    if (strat.target) {
-        parts.push(String(strat.target));
-    }
-    if (strat.rules) {
-        parts.push(String(strat.rules));
-    }
-    return parts.join("\n\n");
+    const stratagems = ((roster && roster.stratagems) || []).map((strat) => ({
+        name: (strat && strat.name) || "",
+        type: (strat && strat.type) || "",
+        cp: strat ? strat.cp : null,
+    }));
+    return {
+        stratagems,
+        stratagem_message: stratagems.length
+            ? ""
+            : (roster && roster.stratagem_message) || NO_DECK_MESSAGE,
+    };
 }
 
 /**
@@ -824,6 +836,7 @@ export function stratagemDeckView(roster, openKey) {
             key,
             name: strat.name || "",
             cp: strat.cp,
+            type: strat.type || "",
             cpLabel: stratagemCpLabel(strat.cp),
             open,
             text: open ? stratagemBody(strat) : "",

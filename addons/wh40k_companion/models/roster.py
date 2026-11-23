@@ -1,7 +1,10 @@
 from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError
 
-from odoo.addons.wh40k_companion.catalogues.stratagems import resolve_stratagem_deck
+from odoo.addons.wh40k_companion.catalogues.stratagems import (
+    resolve_stratagem_deck,
+    stratagem_fields_for_viewer,
+)
 
 
 class Wh40kRoster(models.Model):
@@ -124,9 +127,10 @@ class Wh40kRoster(models.Model):
         self.ensure_one()
         partner = partner or self.env.user.partner_id
         self.check_detail_access(partner)
+        viewer_owns_roster = self.partner_id.id == partner.id
         # Opponent may lack ACL on foreign roster rows; serialize after explicit check.
         roster = self
-        if roster.partner_id.id != partner.id:
+        if not viewer_owns_roster:
             roster = self.sudo()
         units = []
         rules = []
@@ -204,8 +208,7 @@ class Wh40kRoster(models.Model):
                             "models": models_payload,
                         }
                     )
-        deck = resolve_stratagem_deck(roster._detachment_catalogue_pairs())
-        return {
+        payload = {
             "id": roster.id,
             "name": roster.name,
             "points_used": roster.points_used,
@@ -213,9 +216,13 @@ class Wh40kRoster(models.Model):
             "detachment_name": roster.detachment_name or "",
             "units": units,
             "rules": rules,
-            "stratagems": deck["stratagems"],
-            "stratagem_message": deck["message"],
         }
+        # The match screen loads this dict for both rosters. Only the owner
+        # receives a stratagem deck; the opponent's payload omits it entirely.
+        if viewer_owns_roster:
+            deck = resolve_stratagem_deck(roster._detachment_catalogue_pairs())
+            payload.update(stratagem_fields_for_viewer(deck, True))
+        return payload
 
     def _detachment_catalogue_pairs(self):
         """``(catalogue name, detachment name)`` for each selected detachment.

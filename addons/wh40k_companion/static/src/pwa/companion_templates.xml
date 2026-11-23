@@ -580,14 +580,6 @@
                                 <span class="wh40k-rules-icon" aria-hidden="true">§</span>
                                 <span t-out="this.state.oppPaneMode === 'rules' ? 'Ростер' : 'Правила'"/>
                             </button>
-                            <button type="button"
-                                    class="wh40k-btn wh40k-rules-toggle wh40k-stratagems-toggle"
-                                    t-att-class="{'active': this.state.oppPaneMode === 'stratagems'}"
-                                    t-att-aria-pressed="this.state.oppPaneMode === 'stratagems' ? 'true' : 'false'"
-                                    title="Стратагемы противника"
-                                    t-on-click="() => this.setPaneMode('opp', 'stratagems')">
-                                <span>Стратагемы</span>
-                            </button>
                         </div>
                     </div>
 
@@ -601,27 +593,6 @@
                                 </div>
                             </t>
                             <p t-if="!this.oppRules.length" class="wh40k-muted">Нет army/detachment правил у противника.</p>
-                        </div>
-                    </t>
-                    <t t-elif="this.state.oppPaneMode === 'stratagems'">
-                        <div class="wh40k-pane-rules wh40k-pane-stratagems">
-                            <p t-if="this.detachmentLabelFor('opp')" class="wh40k-muted" t-out="this.detachmentLabelFor('opp')"/>
-                            <t t-foreach="this.stratagemsFor('opp')" t-as="strat" t-key="'opp-' + strat.detachment + '-' + strat.name">
-                                <button type="button"
-                                        class="wh40k-btn wh40k-stratagem"
-                                        t-att-class="{'open': this.isStratagemOpen('opp', strat)}"
-                                        t-att-aria-expanded="this.isStratagemOpen('opp', strat) ? 'true' : 'false'"
-                                        t-on-click="() => this.toggleStratagem('opp', strat)">
-                                    <span class="wh40k-stratagem-head">
-                                        <span class="wh40k-stratagem-name" t-out="strat.name"/>
-                                        <span class="wh40k-muted" t-out="this.stratagemCpLabel(strat.cp)"/>
-                                    </span>
-                                    <span t-if="this.isStratagemOpen('opp', strat)"
-                                          class="wh40k-stratagem-body"
-                                          t-out="this.stratagemBody(strat)"/>
-                                </button>
-                            </t>
-                            <p t-if="!this.stratagemsFor('opp').length" class="wh40k-muted" t-out="this.stratagemMessageFor('opp')"/>
                         </div>
                     </t>
                     <t t-else="">

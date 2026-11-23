@@ -13,7 +13,7 @@ Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
 20.0.1.27.0 highlights:
 - Roster import stores the selected detachment name. Stratagem text stays in a static catalogue keyed by faction and detachment, and is not copied onto the roster.
-- «Стратагемы» sits next to «Правила» on the player's roster and on the opponent's roster. The list shows name and CP. Tapping a row opens its text; tapping it again closes it. There is no used toggle and no CP spend.
+- «Стратагемы» sits next to «Правила» on the player's own roster only. The opponent does not see that button or list. A roster detail read during a match includes the viewer's deck (name, type, CP) and omits the opponent's deck. Tapping a row opens its type; tapping again closes it. There is no used toggle and no CP spend.
 - A detachment with no catalogue entry still imports. The list is empty and says "no deck for this detachment".
 20.0.1.26.0 highlights:
 - The Характеристики button is gone. Tapping a squad header opens every model's characteristics. Tapping one miniature inside Модели opens only that model's characteristics. A second tap closes them.

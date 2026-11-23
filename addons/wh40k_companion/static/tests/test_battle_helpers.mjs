@@ -604,58 +604,52 @@ check("rememberJoinToken / clear", () => {
 const sampleDeck = [
     {
         name: "Get Stuck In",
+        type: "Battle Tactic",
         cp: 1,
         when: "Fight phase",
         target: "One friendly unit",
         rules: "Test rules text.",
-        detachment: "Waaaagh! Tribe",
     },
     {
         name: "More Dakka",
+        type: "Strategic Ploy",
         cp: 2,
-        when: "Shooting phase",
-        target: "One enemy unit",
         rules: "Another text.",
-        detachment: "Waaaagh! Tribe",
     },
 ];
 
-function assertDeckOpensAndCloses(roster, label) {
+check("own roster lists name and CP and opens the type", () => {
+    const roster = { stratagems: sampleDeck, stratagem_message: "" };
     let open = null;
     let view = mod.stratagemDeckView(roster, open);
-    assert.equal(view.empty, false, label);
-    assert.equal(view.rows.length, 2, label);
+    assert.equal(view.empty, false);
     assert.equal(view.rows[0].name, "Get Stuck In");
     assert.equal(view.rows[0].cpLabel, "1 CP");
-    assert.equal(view.rows[1].cpLabel, "2 CP");
     assert.equal(view.rows[0].text, "");
+    open = mod.toggleOpenStratagem(open, sampleDeck[0]);
+    view = mod.stratagemDeckView(roster, open);
+    assert.equal(view.rows[0].open, true);
+    assert.equal(view.rows[0].text, "Battle Tactic");
+    assert.equal(view.rows[0].text.includes("Fight phase"), false);
+    assert.equal(view.rows[0].text.includes("Test rules text."), false);
+    open = mod.toggleOpenStratagem(open, sampleDeck[0]);
+    view = mod.stratagemDeckView(roster, open);
     assert.equal(view.rows[0].open, false);
-    open = mod.toggleOpenStratagem(open, sampleDeck[0]);
-    view = mod.stratagemDeckView(roster, open);
-    assert.equal(view.rows[0].open, true, label);
-    assert.match(view.rows[0].text, /Fight phase/);
-    assert.match(view.rows[0].text, /One friendly unit/);
-    assert.match(view.rows[0].text, /Test rules text/);
-    assert.equal(view.rows[1].open, false);
-    assert.equal(view.rows[1].text, "");
-    open = mod.toggleOpenStratagem(open, sampleDeck[0]);
-    view = mod.stratagemDeckView(roster, open);
-    assert.equal(view.rows[0].open, false, label);
     assert.equal(view.rows[0].text, "");
-}
-
-check("own roster lists stratagems and opens then closes the text", () => {
-    assertDeckOpensAndCloses(
-        { stratagems: sampleDeck, stratagem_message: "" },
-        "own"
-    );
+    const fields = mod.viewerStratagemFields(roster, true);
+    assert.deepEqual(Object.keys(fields.stratagems[0]).sort(), ["cp", "name", "type"]);
+    assert.equal(fields.stratagems[0].rules, undefined);
+    assert.equal(fields.stratagem_message, "");
 });
 
-check("opponent roster lists stratagems and opens then closes the text", () => {
-    assertDeckOpensAndCloses(
-        { stratagems: sampleDeck, stratagem_message: "" },
-        "opponent"
+check("opponent match payload has no stratagem deck", () => {
+    const fields = mod.viewerStratagemFields(
+        { stratagems: sampleDeck, stratagem_message: "no deck for this detachment" },
+        false
     );
+    assert.deepEqual(fields, {});
+    assert.equal(Object.hasOwn(fields, "stratagems"), false);
+    assert.equal(Object.hasOwn(fields, "stratagem_message"), false);
 });
 
 check("unknown detachment deck is empty with the no-deck message", () => {
@@ -676,15 +670,16 @@ check("stratagem and rules panes toggle back to the unit list", () => {
     assert.equal(mod.paneHeading("stratagems"), "Стратагемы");
 });
 
-check("stratagem buttons sit next to Правила for own roster, opponent, and roster detail", () => {
+check("stratagem button is on the owner's panes and not the opponent pane", () => {
     const xml = readFileSync(join(here, "../src/pwa/companion_templates.xml"), "utf8");
-    assert.equal((xml.match(/Стратагемы/g) || []).length >= 3, true);
+    const opp = xml.split('data-pane="opponent"')[1] || "";
     assert.ok(xml.includes("setPaneMode('own', 'stratagems')"));
-    assert.ok(xml.includes("setPaneMode('opp', 'stratagems')"));
     assert.ok(xml.includes("setPaneMode('roster', 'stratagems')"));
     assert.ok(xml.includes("stratagemsFor('own')"));
-    assert.ok(xml.includes("stratagemsFor('opp')"));
     assert.ok(xml.includes("stratagemsFor('roster')"));
+    assert.equal(opp.includes("Стратагемы"), false);
+    assert.equal(opp.includes("stratagemsFor"), false);
+    assert.equal(xml.includes("setPaneMode('opp', 'stratagems')"), false);
     assert.equal(xml.includes("wh40k-stratagem-used"), false);
 });
 

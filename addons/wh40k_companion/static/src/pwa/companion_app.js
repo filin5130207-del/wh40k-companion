@@ -1465,9 +1465,10 @@ export class Wh40kCompanionApp extends Component {
             const other = await this.rpc(`${API}/roster/${oppRosterId}/detail`);
             this._rosterCache[oppRosterId] = other.roster;
             this.state.oppRules = other.roster?.rules || [];
-            this.state.oppStratagems = other.roster?.stratagems || [];
-            this.state.oppStratagemMessage = other.roster?.stratagem_message || "";
-            this.state.oppDetachmentName = other.roster?.detachment_name || "";
+            // The opponent's deck is not in this payload and is not kept client-side.
+            this.state.oppStratagems = [];
+            this.state.oppStratagemMessage = "";
+            this.state.oppDetachmentName = "";
         }
         this.setScreen("game");
     }
