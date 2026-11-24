@@ -170,6 +170,33 @@ check("new recruit space wolves text resolves the same books", () => {
     assert.equal(statusOf(auf, "Logan Grimnar", "Storm bolter"), "weapon:Storm Bolter");
 });
 
+function stormShields(result) {
+    const rows = [];
+    for (const unit of result.units) {
+        for (const item of unit.items) {
+            if (item.kind !== "gear" || item.isModel) continue;
+            if (!/storm shield/i.test(item.name || "")) continue;
+            rows.push(`${unit.name}:${item.match && item.match.status}`);
+        }
+    }
+    return rows;
+}
+
+check("storm shield stays an unmatched weapon on both lists", () => {
+    const gg = run("gg.txt");
+    const auf = run("aufsky-drift.txt");
+    const ggShields = stormShields(gg);
+    const aufShields = stormShields(auf);
+    assert.ok(ggShields.length >= 1, ggShields.join(","));
+    assert.ok(aufShields.length >= 1, aufShields.join(","));
+    assert.ok(ggShields.every((row) => row.endsWith(":unmatched")), ggShields.join(","));
+    assert.ok(aufShields.every((row) => row.endsWith(":unmatched")), aufShields.join(","));
+    assert.ok(gg.units.every((unit) => unit.datasheetId));
+    assert.ok(auf.units.every((unit) => unit.datasheetId));
+    assert.ok(gg.detachments.every((det) => det.id));
+    assert.ok(auf.detachments.every((det) => det.id));
+});
+
 check("a non-space-wolves list resolves against its own book", () => {
     const orks = catalogue.factions.find((faction) => faction.id === "orks");
     const det = orks.detachments[0];

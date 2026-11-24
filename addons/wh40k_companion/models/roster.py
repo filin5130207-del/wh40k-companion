@@ -1,6 +1,9 @@
 from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError
 
+from ..catalogues.rules_catalogue import rule_for_viewer
+from ..parsers.roster_text import RosterTextParser
+
 
 class Wh40kRoster(models.Model):
     _name = "wh40k.roster"
@@ -125,24 +128,30 @@ class Wh40kRoster(models.Model):
             roster = self.sudo()
         units = []
         rules = []
+        owner_view = roster.partner_id.id == partner.id
+
+        def pack_rule(rule, default_scope):
+            return rule_for_viewer(
+                {
+                    "name": rule.name,
+                    "scope": rule.rule_scope or default_scope,
+                    "description": rule.description or "",
+                    "flavor": rule.flavor or "",
+                    "cp": rule.cp or "",
+                    "when": rule.when_text or "",
+                    "target": rule.target_text or "",
+                    "effect": rule.effect_text or "",
+                    "restrictions": rule.restrictions or "",
+                },
+                owner_view,
+            )
+
         for force in roster.force_ids:
             for rule in force.army_rule_ids:
-                rules.append(
-                    {
-                        "name": rule.name,
-                        "description": rule.description or "",
-                        "scope": "army",
-                    }
-                )
+                rules.append(pack_rule(rule, "army"))
             for det in force.detachment_ids:
                 for rule in det.detachment_rule_ids:
-                    rules.append(
-                        {
-                            "name": rule.name,
-                            "description": rule.description or "",
-                            "scope": "detachment",
-                        }
-                    )
+                    rules.append(pack_rule(rule, "detachment"))
                 for unit in det.unit_ids:
                     models_payload = []
                     for model in unit.model_ids:
@@ -221,6 +230,13 @@ class Wh40kRoster(models.Model):
                     "description": rule.get("description"),
                     "external_id": rule.get("external_id"),
                     "owner_partner_id": owner_id,
+                    "rule_scope": rule.get("rule_scope") or False,
+                    "cp": rule.get("cp") or False,
+                    "when_text": rule.get("when") or False,
+                    "target_text": rule.get("target") or False,
+                    "effect_text": rule.get("effect") or False,
+                    "restrictions": rule.get("restrictions") or False,
+                    "flavor": rule.get("flavor") or False,
                 }
                 for rule in rules
             ]
@@ -349,6 +365,27 @@ class Wh40kRoster(models.Model):
                 )
             )
         return force_cmds
+
+    @api.model
+    def action_import_text(self, partner, text, name=None):
+        """Import an official-app or New Recruit text export."""
+        if not text or not str(text).strip():
+            raise UserError("Missing roster text.")
+        try:
+            parsed = RosterTextParser(text).parse()
+        except ValueError as exc:
+            raise UserError(str(exc)) from exc
+        if name:
+            parsed["name"] = name
+        units = [
+            unit
+            for force in parsed.get("forces") or []
+            for det in force.get("detachments") or []
+            for unit in det.get("units") or []
+        ]
+        if not units:
+            raise UserError("No units found in that roster text.")
+        return self.action_import_parsed(partner, parsed)
 
     @api.model
     def action_import_parsed(self, partner, parsed):

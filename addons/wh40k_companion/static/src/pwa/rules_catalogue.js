@@ -2,6 +2,8 @@
 
 const PROSE_KEYS = new Set(["body", "ruleBody", "when", "target", "effect"]);
 
+const SCOPED_PROSE = new Set([...PROSE_KEYS, "description", "flavor"]);
+
 /** Drop army-rule body, detachment rule body, and stratagem when/target/effect. */
 export function stripRuleProse(value) {
   if (Array.isArray(value)) {
@@ -10,9 +12,13 @@ export function stripRuleProse(value) {
   if (!value || typeof value !== "object") {
     return value;
   }
+  const drop =
+    value.scope === "army" || value.scope === "detachment" || value.scope === "stratagem"
+      ? SCOPED_PROSE
+      : PROSE_KEYS;
   const out = {};
   for (const [key, item] of Object.entries(value)) {
-    if (PROSE_KEYS.has(key)) {
+    if (drop.has(key)) {
       continue;
     }
     out[key] = stripRuleProse(item);

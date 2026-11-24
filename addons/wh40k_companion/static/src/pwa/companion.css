@@ -354,7 +354,8 @@
 
 .wh40k-input,
 .wh40k-select,
-.wh40k-file {
+.wh40k-file,
+.wh40k-paste {
     width: 100%;
     background: var(--wh40k-bg);
     border: 1px solid var(--wh40k-border);
@@ -362,6 +363,11 @@
     border-radius: 4px;
     padding: 0.55rem 0.7rem;
     margin-bottom: 0.75rem;
+}
+
+.wh40k-paste {
+    min-height: 8rem;
+    resize: vertical;
 }
 
 .wh40k-row {

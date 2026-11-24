@@ -11,6 +11,7 @@ from odoo.http.session import authenticate
 
 from ..catalogues.rules_catalogue import owner_catalogue
 from ..parsers.battlescribe_parser import BattlescribeParser
+from ..parsers.roster_text import RosterTextParser
 
 _logger = logging.getLogger(__name__)
 
@@ -275,12 +276,42 @@ class Wh40kCompanionController(http.Controller):
         self._partner()
         return self._ok(catalogue=owner_catalogue())
 
-    def _api_roster_preview(self, roster_json=None, **kwargs):
+    def _roster_text(self, roster_text=None, **kwargs):
+        if roster_text is None and kwargs:
+            roster_text = kwargs.get("roster_text")
+        if isinstance(roster_text, str):
+            roster_text = roster_text.strip()
+        return roster_text or ""
+
+    def _api_roster_preview(self, roster_json=None, roster_text=None, **kwargs):
+        text = self._roster_text(roster_text, **kwargs)
+        if text:
+            try:
+                preview = RosterTextParser(text).preview()
+            except ValueError as exc:
+                raise UserError(str(exc)) from exc
+            return self._ok(preview=preview)
         parser = self._parse_roster_payload(roster_json=roster_json, **kwargs)
         return self._ok(preview=parser.preview())
 
-    def _api_roster_import(self, roster_json=None, name=None, **kwargs):
+    def _api_roster_import(self, roster_json=None, roster_text=None, name=None, **kwargs):
         partner = self._partner()
+        text = self._roster_text(roster_text, **kwargs)
+        if text:
+            roster = request.env["wh40k.roster"].action_import_text(partner, text, name=name)
+            preview = RosterTextParser(text).preview()
+            return self._ok(
+                roster_id=roster.id,
+                name=roster.name,
+                points_used=roster.points_used,
+                points_limit=roster.points_limit,
+                summary={
+                    "units": preview["unit_count"],
+                    "points_used": roster.points_used,
+                    "points_limit": roster.points_limit,
+                },
+                preview=preview,
+            )
         parser = self._parse_roster_payload(roster_json=roster_json, **kwargs)
         parsed = parser.parse()
         if name:
@@ -479,13 +510,22 @@ class Wh40kCompanionController(http.Controller):
         return self._wrap(self._api_rules_catalogue, **kwargs)
 
     @http.route("/wh40k/api/roster/preview", type="jsonrpc", auth="user", methods=["POST"])
-    def api_roster_preview(self, roster_json=None, **kwargs):
-        return self._wrap(self._api_roster_preview, roster_json=roster_json, **kwargs)
+    def api_roster_preview(self, roster_json=None, roster_text=None, **kwargs):
+        return self._wrap(
+            self._api_roster_preview,
+            roster_json=roster_json,
+            roster_text=roster_text,
+            **kwargs,
+        )
 
     @http.route("/wh40k/api/roster/import", type="jsonrpc", auth="user", methods=["POST"])
-    def api_roster_import(self, roster_json=None, name=None, **kwargs):
+    def api_roster_import(self, roster_json=None, roster_text=None, name=None, **kwargs):
         return self._wrap(
-            self._api_roster_import, roster_json=roster_json, name=name, **kwargs
+            self._api_roster_import,
+            roster_json=roster_json,
+            roster_text=roster_text,
+            name=name,
+            **kwargs,
         )
 
     @http.route("/wh40k/api/player/dashboard", type="jsonrpc", auth="user")
@@ -593,12 +633,16 @@ class Wh40kCompanionController(http.Controller):
         return self.api_rules_catalogue(**kwargs)
 
     @http.route("/wh40k/roster/preview", type="jsonrpc", auth="user", methods=["POST"])
-    def roster_preview(self, roster_json=None, **kwargs):
-        return self.api_roster_preview(roster_json=roster_json, **kwargs)
+    def roster_preview(self, roster_json=None, roster_text=None, **kwargs):
+        return self.api_roster_preview(
+            roster_json=roster_json, roster_text=roster_text, **kwargs
+        )
 
     @http.route("/wh40k/roster/import", type="jsonrpc", auth="user", methods=["POST"])
-    def roster_import(self, roster_json=None, name=None, **kwargs):
-        return self.api_roster_import(roster_json=roster_json, name=name, **kwargs)
+    def roster_import(self, roster_json=None, roster_text=None, name=None, **kwargs):
+        return self.api_roster_import(
+            roster_json=roster_json, roster_text=roster_text, name=name, **kwargs
+        )
 
     @http.route("/wh40k/player/dashboard", type="jsonrpc", auth="user")
     def player_dashboard(self, **kwargs):
