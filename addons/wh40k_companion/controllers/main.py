@@ -9,6 +9,7 @@ from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.http import request
 from odoo.http.session import authenticate
 
+from ..catalogues.rules_catalogue import owner_catalogue
 from ..parsers.battlescribe_parser import BattlescribeParser
 
 _logger = logging.getLogger(__name__)
@@ -263,6 +264,17 @@ class Wh40kCompanionController(http.Controller):
         )
 
     # ================================================================ JSON API
+    def _api_rules_catalogue(self, **kwargs):
+        """Owner rules reference. Not included in match state.
+
+        The signed-in player is loading the catalogue for their own lists.
+        Army-rule bodies, detachment rule bodies, and stratagem when/target/effect
+        stay on this response. ``wh40k.match.to_state_dict`` strips those keys
+        before a payload is shared with the opponent.
+        """
+        self._partner()
+        return self._ok(catalogue=owner_catalogue())
+
     def _api_roster_preview(self, roster_json=None, **kwargs):
         parser = self._parse_roster_payload(roster_json=roster_json, **kwargs)
         return self._ok(preview=parser.preview())
@@ -462,6 +474,10 @@ class Wh40kCompanionController(http.Controller):
             return self._json_error(exc)
 
     # ---- canonical /wh40k/api/* ------------------------------------------------
+    @http.route("/wh40k/api/rules/catalogue", type="jsonrpc", auth="user")
+    def api_rules_catalogue(self, **kwargs):
+        return self._wrap(self._api_rules_catalogue, **kwargs)
+
     @http.route("/wh40k/api/roster/preview", type="jsonrpc", auth="user", methods=["POST"])
     def api_roster_preview(self, roster_json=None, **kwargs):
         return self._wrap(self._api_roster_preview, roster_json=roster_json, **kwargs)
@@ -572,6 +588,10 @@ class Wh40kCompanionController(http.Controller):
         return self._wrap(self._api_roster_detail, roster_id, **kwargs)
 
     # ---- legacy aliases (same handlers) ---------------------------------------
+    @http.route("/wh40k/rules/catalogue", type="jsonrpc", auth="user")
+    def rules_catalogue(self, **kwargs):
+        return self.api_rules_catalogue(**kwargs)
+
     @http.route("/wh40k/roster/preview", type="jsonrpc", auth="user", methods=["POST"])
     def roster_preview(self, roster_json=None, **kwargs):
         return self.api_roster_preview(roster_json=roster_json, **kwargs)

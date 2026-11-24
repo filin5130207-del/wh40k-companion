@@ -1,0 +1,176 @@
+Ауфский дрифт (2000 Points)
+
+# ++ Army Roster ++ [2000 pts, 3 Detachment Points]
+
+## Configuration
+
+Faction: Space Wolves
+Battle Size: Strike Force (2000 Point limit)
+Detachment: Saga of the Beastslayer, Assault Brethren, and Stormlance Task Force (3 Detachment Points)
+Force Disposition: Purge the Foe
+
+## Character
+
+Logan Grimnar (150 pts)
+  • Warlord
+  • Leading: Terminator Assault Squad
+  • 1x Axe Morkai - Sweep
+  • 1x Axe Morkai - Strike
+  • 1x Storm bolter
+  • 1x Tyrnak and Fenrir
+
+Captain on Bike (110 pts)
+  • Leading: Wulfen with Storm Shields
+  • Enhancements: Wolf-Touched (+15 pts)
+  • 1x Twin bolt rifle
+  • 1x Thunder Hammer
+  • 1x Plasma pistol - supercharge
+  • 1x Plasma pistol - standard
+
+Chaplain on Bike (75 pts)
+  • Leading: Outrider Squad
+  • Enhancements: Imperium's Sword (+20 pts)
+  • 1x Absolvor bolt pistol
+  • 1x Crozius arcanum
+  • 1x Twin bolt rifle
+
+## Infantry
+
+Company Heroes (125 pts)
+  • 1x Ancient
+    • 1x Combat Knife
+    • 1x Master-crafted Bolt Pistol
+    • 1x Master-crafted Bolt Rifle
+  • 1x Company Champion
+    • 1x Master-crafted Bolt Pistol
+    • 1x Master-crafted Power Weapon
+  • 1x Company Veteran w/ Bolt Rifle
+    • 1x Combat Knife
+    • 1x Master-crafted Bolt Pistol
+    • 1x Master-crafted Bolt Rifle
+  • 1x Company Veteran w/ Heavy Bolter
+    • 1x Combat Knife
+    • 1x Master-crafted Bolt Pistol
+    • 1x Master-crafted Heavy Bolter
+
+Eradicator Squad with Melta Rifles (100 pts)
+  • 1x Eradicator
+    • 1x Bolt pistol
+    • 1x Ceramite Fists
+    • 1x Melta Rifle HUNTER:Monster/Vehicle
+    • 1x Melta Rifle
+  • 1x Eradicator Sergeant
+    • 1x Bolt pistol
+    • 1x Ceramite Fists
+    • 1x Melta Rifle HUNTER:Monster/Vehicle
+    • 1x Melta Rifle
+  • 1x Eradicator with Multi-melta
+    • 1x Bolt pistol
+    • 1x Ceramite Fists
+    • 1x Multi-melta
+    • 1x Multi-melta HUNTER:Monster/Vehicle
+
+Eradicator Squad with Melta Rifles (100 pts)
+  • 1x Eradicator
+    • 1x Bolt pistol
+    • 1x Ceramite Fists
+    • 1x Melta Rifle HUNTER:Monster/Vehicle
+    • 1x Melta Rifle
+  • 1x Eradicator Sergeant
+    • 1x Bolt pistol
+    • 1x Ceramite Fists
+    • 1x Melta Rifle HUNTER:Monster/Vehicle
+    • 1x Melta Rifle
+  • 1x Eradicator with Multi-melta
+    • 1x Bolt pistol
+    • 1x Ceramite Fists
+    • 1x Multi-melta
+    • 1x Multi-melta HUNTER:Monster/Vehicle
+
+Scout Squad (65 pts)
+  • 1x Scout Sergeant
+    • 1x Bolt pistol
+    • 1x Chainsword
+    • 1x Shotgun
+  • 1x Scout w/ Heavy Weapon
+    • 1x Bolt pistol
+    • 1x Combat Knife
+    • 1x Heavy Bolter
+  • 1x Scout w/ Sniper Rifle
+    • 1x Bolt pistol
+    • 1x Combat Knife
+    • 1x Sniper Rifle
+  • 2x Scouts w/ Shotgun
+    • 2x Bolt pistol
+    • 2x Combat Knife
+    • 2x Shotgun
+
+Terminator Assault Squad (170 pts)
+  • 1x Assault Terminator Sergeant
+    • 1x Thunder Hammer & Storm Shield
+      • 1x Storm Shield
+      • 1x Thunder Hammer
+  • 4x Assault Terminator w/ Thunder Hammer & Storm Shield
+    • 4x Storm Shield
+    • 4x Thunder Hammer
+  • Enhancements: Furious Assault (Upgrade) (+10 pts)
+
+Wulfen with Storm Shields (250 pts)
+  • 9x Wulfen w/Auto-launcher
+    • 9x Storm shield
+    • 9x Stormfrag auto-launcher
+    • 9x Thunder Hammer
+    • 9x Thunder Hammer (Hunter: Monster/Vehicle)
+  • 1x Wulfen w/Death Totem
+    • 1x Storm shield
+    • 1x Thunder Hammer
+    • 1x Thunder Hammer (Hunter: Monster/Vehicle)
+
+## Mounted
+
+Outrider Squad (80 pts)
+  • 2x Outrider
+    • 2x Chainsword
+    • 2x Heavy Bolt Pistol
+    • 2x Twin bolt rifle
+  • 1x Outrider Sergeant
+    • 1x Twin bolt rifle
+    • 1x Thunder Hammer
+    • 1x Plasma pistol - supercharge
+    • 1x Plasma pistol - standard
+
+Thunderwolf Cavalry (230 pts)
+  • 6x Thunderwolf w/ boltgun and storm shield
+    • 6x Boltgun
+    • 6x Storm shield
+    • 6x Teeth and claws
+    • 6x Wolf Guard Weapon
+
+Thunderwolf Cavalry (230 pts)
+  • 6x Thunderwolf w/ boltgun and storm shield
+    • 6x Boltgun
+    • 6x Storm shield
+    • 6x Teeth and claws
+    • 6x Wolf Guard Weapon
+
+## Beast
+
+Fenrisian Wolves (45 pts)
+  • 5x Fenrisian Wolf
+    • 5x Teeth and claws
+
+## Dedicated Transport
+
+Impulsor (70 pts)
+  • 1x Armoured Hull
+  • 1x Ironhail Heavy Stubber
+  • 1x Shield Dome
+  • 1x Storm Bolters
+
+Impulsor (70 pts)
+  • 1x Armoured Hull
+  • 1x Ironhail Heavy Stubber
+  • 1x Shield Dome
+  • 1x Storm Bolters
+
+Created with newrecruit.eu v38.16

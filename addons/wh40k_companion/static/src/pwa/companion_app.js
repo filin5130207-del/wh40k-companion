@@ -40,6 +40,7 @@ import {
     UNDO_STACK_LIMIT,
 } from "./battle_store";
 import { createMatchBus } from "./bus_client";
+import { matchRoster, parseRoster } from "./rules_catalogue";
 import { Wh40kErrorBoundary } from "./error_boundary";
 import {
     NicknameGate,
@@ -421,6 +422,39 @@ export class Wh40kCompanionApp extends Component {
         if (next !== "roster_detail") {
             this.state.rosterDetailPaneMode = "units";
         }
+        // The catalogue is the owner's rules reference. It is not copied onto
+        // match state, which is what the opponent receives.
+        if (next === "rosters" || next === "roster_detail") {
+            this.ensureRulesCatalogue();
+        }
+    }
+
+    ensureRulesCatalogue() {
+        if (this._rulesCatalogue) {
+            return Promise.resolve(this._rulesCatalogue);
+        }
+        if (this._rulesCataloguePromise) {
+            return this._rulesCataloguePromise;
+        }
+        this._rulesCataloguePromise = this.rpc(`${API}/rules/catalogue`)
+            .then((data) => {
+                this._rulesCatalogue = data.catalogue || null;
+                return this._rulesCatalogue;
+            })
+            .catch((error) => {
+                this._rulesCataloguePromise = null;
+                this._rulesCatalogueError = error;
+                return null;
+            });
+        return this._rulesCataloguePromise;
+    }
+
+    async resolveTextRoster(text) {
+        const catalogue = await this.ensureRulesCatalogue();
+        if (!catalogue) {
+            throw new Error("Rules catalogue is not loaded.");
+        }
+        return matchRoster(parseRoster(text), catalogue);
     }
 
     async openRosterDetail(rosterId) {
