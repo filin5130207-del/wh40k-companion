@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="action_wh40k_pwa" model="ir.actions.act_url">
+        <field name="name">Battle App</field>
+        <field name="url">/wh40k/app</field>
+        <field name="target">self</field>
+    </record>
+
+    <menuitem id="menu_wh40k_root" name="WH40k" sequence="20" groups="wh40k_session.group_player"/>
+    <menuitem id="menu_wh40k_app" name="Battle App" parent="menu_wh40k_root" action="action_wh40k_pwa" sequence="10"/>
+</odoo>

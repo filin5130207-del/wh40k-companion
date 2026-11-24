@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="mission_purge_the_foe" model="wh40k.mission">
+        <field name="name">Purge the Foe</field>
+        <field name="sequence">10</field>
+        <field name="deployment">Dawn of War</field>
+        <field name="description">Score progressive VP for destroying enemy units. Bonus for destroying more units than your opponent each battle round.</field>
+    </record>
+    <record id="mission_take_and_hold" model="wh40k.mission">
+        <field name="name">Take and Hold</field>
+        <field name="sequence">20</field>
+        <field name="deployment">Dawn of War</field>
+        <field name="description">Control objective markers to score progressive victory points each battle round.</field>
+    </record>
+    <record id="mission_deploy_teleport_homer" model="wh40k.mission">
+        <field name="name">Deploy Teleport Homer</field>
+        <field name="sequence">30</field>
+        <field name="deployment">Search and Destroy</field>
+        <field name="description">Secure objectives and complete covert actions while contesting the battlefield.</field>
+    </record>
+    <record id="mission_supply_drop" model="wh40k.mission">
+        <field name="name">Supply Drop</field>
+        <field name="sequence">40</field>
+        <field name="deployment">Hammer and Anvil</field>
+        <field name="description">Fight over a shifting supply drop. Objectives may change value as the battle progresses.</field>
+    </record>
+    <record id="mission_vital_ground" model="wh40k.mission">
+        <field name="name">Vital Ground</field>
+        <field name="sequence">50</field>
+        <field name="deployment">Sweeping Engagement</field>
+        <field name="description">Hold key terrain and objective markers under contested deployment.</field>
+    </record>
+    <record id="mission_scorched_earth" model="wh40k.mission">
+        <field name="name">Scorched Earth</field>
+        <field name="sequence">60</field>
+        <field name="deployment">Dawn of War</field>
+        <field name="description">Burn objectives after scoring to deny them to your opponent.</field>
+    </record>
+</odoo>

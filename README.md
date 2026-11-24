@@ -10,7 +10,27 @@ Odoo **20** module `wh40k_companion`: import NewRecruit/Battlescribe JSON roster
 - Match updates via the Odoo bus websocket (`/websocket`, channel `wh40k.match.<partner_id>`). `/wh40k/api/match/watch` stays as the fallback when the socket fails, and a finish still wakes an in-flight watch. Offline S7 is still out of scope
 - Join / QR links use system parameter `wh40k.public_base_url` (a tunnel or a real host). `web.base.url` is used only when it is not loopback or a private address. A private link is shown as LAN-only
 
-## Quick start (Docker Compose)
+## Three services
+
+A single Odoo database cannot share `res.users`, groups, or `Many2one` links across registries. The split therefore runs three Odoo processes and three databases. Accounts stay on **session**. Roster stores `owner_uid`. Match copies a roster snapshot at create/join. The PWA on session calls the other two with a bearer token. Research notes: the project Context file `docs/odoo-microservices.md`.
+
+The monolith module `wh40k_companion` is unchanged and still runs from `docker-compose.yml`. Do not point the service stack at that volume, and do not pass `--db-drop`.
+
+```bash
+docker compose -f docker-compose.services.yml up -d
+```
+
+| Service | Published port | Database | Owns |
+| --- | --- | --- | --- |
+| session | 8069 | `wh40k_session` | signup, login, Player/Manager, nickname, win/loss, PWA, bearer token |
+| roster | 8070 | `wh40k_roster` | Battlescribe/NewRecruit import, datasheets, `owner_uid` |
+| match | 8071 | `wh40k_match` | create, join token, wounds, undo, surrender, watch, mission list |
+
+Open http://localhost:8069/wh40k/app after the first boot finishes installing each module (the boot script installs only when that module is missing). `WH40K_TOKEN_SECRET` must be the same on all three services. The compose file ships a dev default.
+
+Inside the Docker network each Odoo listens on 8069. Match calls `http://roster:8069` and `http://session:8069`. The browser uses ports 8070 and 8071. On a LAN phone the PWA rewrites loopback URLs to the host it was opened on.
+
+## Quick start (monolith)
 
 ```bash
 docker compose up -d
