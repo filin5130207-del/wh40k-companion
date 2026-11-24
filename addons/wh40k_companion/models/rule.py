@@ -9,6 +9,20 @@ class Wh40kRule(models.Model):
     name = fields.Char(required=True, translate=True)
     description = fields.Text(translate=True)
     external_id = fields.Char(index=True)
+    rule_scope = fields.Selection(
+        [
+            ("army", "Army"),
+            ("detachment", "Detachment"),
+            ("stratagem", "Stratagem"),
+        ],
+        string="Scope",
+    )
+    cp = fields.Char(string="CP")
+    when_text = fields.Text(string="When")
+    target_text = fields.Text(string="Target")
+    effect_text = fields.Text(string="Effect")
+    restrictions = fields.Text()
+    flavor = fields.Text()
     owner_partner_id = fields.Many2one(
         "res.partner",
         string="Owner",

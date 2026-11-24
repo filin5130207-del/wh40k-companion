@@ -590,31 +590,69 @@ export class Wh40kCompanionApp extends Component {
         const file = ev.target.files && ev.target.files[0];
         if (!file) {
             this.state.pendingRosterJson = null;
+            this.state.pendingRosterText = null;
             this.state.importPreview = null;
             return;
         }
         const reader = new FileReader();
         reader.onload = async () => {
+            const raw = String(reader.result || "");
+            const trimmed = raw.trim();
             try {
-                this.state.pendingRosterJson = JSON.parse(reader.result);
                 this.state.busy = true;
-                const data = await this.rpc(`${API}/roster/preview`, {
-                    roster_json: this.state.pendingRosterJson,
-                });
-                this.state.importPreview = data.preview;
+                if (trimmed.startsWith("{")) {
+                    this.state.pendingRosterJson = JSON.parse(trimmed);
+                    this.state.pendingRosterText = null;
+                    const data = await this.rpc(`${API}/roster/preview`, {
+                        roster_json: this.state.pendingRosterJson,
+                    });
+                    this.state.importPreview = data.preview;
+                } else {
+                    this.state.pendingRosterJson = null;
+                    this.state.pendingRosterText = raw;
+                    const data = await this.rpc(`${API}/roster/preview`, {
+                        roster_text: raw,
+                    });
+                    this.state.importPreview = data.preview;
+                }
                 this.state.busy = false;
                 this.setScreen("import_preview");
             } catch (e) {
-                this.setError(e.message || "Invalid JSON file.");
+                this.setError(e.message || "Could not read that roster.");
                 this.state.pendingRosterJson = null;
+                this.state.pendingRosterText = null;
                 this.state.importPreview = null;
             }
         };
         reader.readAsText(file);
     }
 
+    onRosterPaste(ev) {
+        this.state.rosterPaste = ev.target.value;
+    }
+
+    async previewPastedRoster() {
+        const text = (this.state.rosterPaste || "").trim();
+        if (!text) {
+            this.setError("Вставьте текст ростера.");
+            return;
+        }
+        try {
+            this.state.busy = true;
+            this.state.pendingRosterJson = null;
+            this.state.pendingRosterText = text;
+            const data = await this.rpc(`${API}/roster/preview`, { roster_text: text });
+            this.state.importPreview = data.preview;
+            this.state.busy = false;
+            this.setScreen("import_preview");
+        } catch (e) {
+            this.setError(e.message || "Could not read that roster.");
+        }
+    }
+
     cancelImportPreview() {
         this.state.pendingRosterJson = null;
+        this.state.pendingRosterText = null;
         this.state.importPreview = null;
         const fileInput = this.rosterFile();
         if (fileInput) {
@@ -624,18 +662,23 @@ export class Wh40kCompanionApp extends Component {
     }
 
     async confirmImportRoster() {
-        if (!this.state.pendingRosterJson) {
-            this.setError("Choose a roster JSON file first.");
+        const payload = {};
+        if (this.state.pendingRosterText) {
+            payload.roster_text = this.state.pendingRosterText;
+        } else if (this.state.pendingRosterJson) {
+            payload.roster_json = this.state.pendingRosterJson;
+        } else {
+            this.setError("Choose a roster file or paste a list first.");
             return;
         }
         try {
             this.state.busy = true;
-            await this.rpc(`${API}/roster/import`, {
-                roster_json: this.state.pendingRosterJson,
-            });
+            await this.rpc(`${API}/roster/import`, payload);
             await this.loadDashboard();
             this.state.busy = false;
             this.state.pendingRosterJson = null;
+            this.state.pendingRosterText = null;
+            this.state.rosterPaste = "";
             this.state.importPreview = null;
             const fileInput = this.rosterFile();
             if (fileInput) {

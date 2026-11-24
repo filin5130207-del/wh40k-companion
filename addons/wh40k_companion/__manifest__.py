@@ -1,16 +1,18 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.27.0",
+    "version": "20.0.1.28.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
 WH40k Battle Companion
 ======================
-Import NewRecruit/Battlescribe JSON rosters, manage player profiles,
+Import NewRecruit/Battlescribe JSON and official-app or New Recruit text rosters, manage player profiles,
 create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
+20.0.1.28.0 highlights:
+- Text export from the official app or New Recruit imports as a roster. Units, model profiles, weapons, detachments, the army rule, and stratagems resolve against the catalogue. The signed-in owner sees that rule text. Match state and the opponent roster payload do not include army-rule bodies, detachment rule bodies, or stratagem when/target/effect.
 20.0.1.27.0 highlights:
 - Rules catalogue for standard-r4-s1-e1 (every faction) loads for the signed-in player. Match state does not carry army-rule bodies, detachment rule bodies, or stratagem when/target/effect.
 20.0.1.26.0 highlights:

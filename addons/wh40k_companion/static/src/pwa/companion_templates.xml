@@ -137,10 +137,17 @@
     <section class="wh40k-panel">
         <h2>Мои ростеры</h2>
         <div class="wh40k-row" style="margin-bottom: 0.75rem;">
-            <input class="wh40k-file" type="file" accept="application/json,.json" t-ref="this.rosterFile" t-on-change="this.onRosterFile"/>
-            <span class="wh40k-muted">Импортировать ростер (JSON)</span>
+            <input class="wh40k-file" type="file" accept="application/json,.json,.txt,text/plain" t-ref="this.rosterFile" t-on-change="this.onRosterFile"/>
+            <span class="wh40k-muted">JSON или текст (official app / New Recruit)</span>
         </div>
-        <p class="wh40k-muted">Выберите NewRecruit / Battlescribe JSON — сначала превью, затем подтверждение. Нажмите ростер, чтобы открыть юниты и правила (только просмотр).</p>
+        <textarea class="wh40k-input wh40k-paste" rows="6"
+                  placeholder="Вставьте текст ростера из official app или New Recruit"
+                  t-on-input="this.onRosterPaste"
+                  t-att-value="this.state.rosterPaste"/>
+        <div class="wh40k-row" style="margin-bottom: 0.75rem;">
+            <button type="button" class="wh40k-btn" t-on-click="this.previewPastedRoster" t-att-disabled="this.state.busy">Разобрать текст</button>
+        </div>
+        <p class="wh40k-muted">JSON NewRecruit / Battlescribe или текст official app и New Recruit. Сначала превью, затем подтверждение. Правила армии видны вам. Нажмите ростер, чтобы открыть юниты и правила (только просмотр).</p>
         <div class="wh40k-list">
             <t t-foreach="this.state.rosters" t-as="roster" t-key="roster.id">
                 <button type="button" class="wh40k-list-item"
@@ -192,8 +199,13 @@
                 <t t-foreach="this.rosterDetailRules" t-as="rule" t-key="'rd-' + rule.name + rule.scope">
                     <div class="wh40k-rule-block">
                         <strong t-out="rule.name"/>
-                        <span class="wh40k-muted" t-out="' (' + rule.scope + ')'"/>
-                        <div class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.description"/>
+                        <span class="wh40k-muted" t-out="' (' + rule.scope + (rule.cp ? ' · ' + rule.cp : '') + ')'"/>
+                        <div t-if="rule.flavor" class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.flavor"/>
+                        <div t-if="rule.description" class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.description"/>
+                        <div t-if="rule.when" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'When: ' + rule.when"/>
+                        <div t-if="rule.target" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'Target: ' + rule.target"/>
+                        <div t-if="rule.effect" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'Effect: ' + rule.effect"/>
+                        <div t-if="rule.restrictions" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'Restrictions: ' + rule.restrictions"/>
                     </div>
                 </t>
                 <p t-if="!this.rosterDetailRules.length" class="wh40k-muted">Нет army/detachment правил для этого ростера.</p>
@@ -223,10 +235,22 @@
            t-out="'Фракция: ' + this.state.importPreview.faction"/>
         <p class="wh40k-muted"
            t-out="'Очки: ' + this.state.importPreview.points_used + '/' + this.state.importPreview.points_limit"/>
+        <label class="wh40k-muted" t-if="this.state.importPreview.detachments">Детачменты</label>
+        <ul class="wh40k-list" t-if="this.state.importPreview.detachments">
+            <t t-foreach="this.state.importPreview.detachments" t-as="detName" t-key="detName_index">
+                <li class="wh40k-list-item"><span t-out="detName"/></li>
+            </t>
+        </ul>
         <label class="wh40k-muted">Юниты</label>
         <ul class="wh40k-list">
             <t t-foreach="this.state.importPreview.units" t-as="unitName" t-key="unitName_index">
                 <li class="wh40k-list-item"><span t-out="unitName"/></li>
+            </t>
+        </ul>
+        <label class="wh40k-muted" t-if="this.state.importPreview.unmatched and this.state.importPreview.unmatched.length">Без профиля оружия</label>
+        <ul class="wh40k-list" t-if="this.state.importPreview.unmatched and this.state.importPreview.unmatched.length">
+            <t t-foreach="this.state.importPreview.unmatched" t-as="miss" t-key="miss_index">
+                <li class="wh40k-list-item"><span t-out="miss"/></li>
             </t>
         </ul>
         <div class="wh40k-row">
@@ -487,8 +511,13 @@
                             <t t-foreach="this.ownRules" t-as="rule" t-key="'own-' + rule.name + rule.scope">
                                 <div class="wh40k-rule-block">
                                     <strong t-out="rule.name"/>
-                                    <span class="wh40k-muted" t-out="' (' + rule.scope + ')'"/>
-                                    <div class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.description"/>
+                                    <span class="wh40k-muted" t-out="' (' + rule.scope + (rule.cp ? ' · ' + rule.cp : '') + ')'"/>
+                                    <div t-if="rule.flavor" class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.flavor"/>
+                                    <div t-if="rule.description" class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.description"/>
+                                    <div t-if="rule.when" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'When: ' + rule.when"/>
+                                    <div t-if="rule.target" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'Target: ' + rule.target"/>
+                                    <div t-if="rule.effect" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'Effect: ' + rule.effect"/>
+                                    <div t-if="rule.restrictions" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'Restrictions: ' + rule.restrictions"/>
                                 </div>
                             </t>
                             <p t-if="!this.ownRules.length" class="wh40k-muted">Нет army/detachment правил для вашего ростера.</p>
@@ -524,8 +553,8 @@
                             <t t-foreach="this.oppRules" t-as="rule" t-key="'opp-' + rule.name + rule.scope">
                                 <div class="wh40k-rule-block">
                                     <strong t-out="rule.name"/>
-                                    <span class="wh40k-muted" t-out="' (' + rule.scope + ')'"/>
-                                    <div class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.description"/>
+                                    <span class="wh40k-muted" t-out="' (' + rule.scope + (rule.cp ? ' · ' + rule.cp : '') + ')'"/>
+                                    <div t-if="rule.restrictions" class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.restrictions"/>
                                 </div>
                             </t>
                             <p t-if="!this.oppRules.length" class="wh40k-muted">Нет army/detachment правил у противника.</p>

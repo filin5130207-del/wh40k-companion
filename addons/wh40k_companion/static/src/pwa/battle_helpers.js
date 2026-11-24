@@ -811,6 +811,8 @@ export function createInitialState(initialJoinToken = "") {
             show_on_home: false,
         },
         pendingRosterJson: null,
+        pendingRosterText: null,
+        rosterPaste: "",
         renderError: "",
     };
 }

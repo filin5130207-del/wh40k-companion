@@ -12,3 +12,4 @@ from . import test_perf_bench
 from . import test_bus_and_public_url
 from . import test_draw_and_unit_profiles
 from . import test_model_controls_and_win_rate
+from . import test_roster_text
