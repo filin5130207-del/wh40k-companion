@@ -117,18 +117,15 @@ class Wh40kRoster(models.Model):
             raise AccessError("You cannot view this roster.")
         return True
 
-    def to_detail_dict(self, partner=None):
-        """Full datasheet dump for PWA. Enforces owner/participant access."""
+    def rules_payload(self):
+        """Army, detachment, and stratagem text for either player.
+
+        Call after the participant check. The read is sudo so the opponent
+        can see a roster their own ACL does not cover.
+        """
         self.ensure_one()
-        partner = partner or self.env.user.partner_id
-        self.check_detail_access(partner)
-        # Opponent may lack ACL on foreign roster rows; serialize after explicit check.
-        roster = self
-        if roster.partner_id.id != partner.id:
-            roster = self.sudo()
-        units = []
+        roster = self.sudo()
         rules = []
-        owner_view = roster.partner_id.id == partner.id
 
         def pack_rule(rule, default_scope):
             return rule_for_viewer(
@@ -143,7 +140,7 @@ class Wh40kRoster(models.Model):
                     "effect": rule.effect_text or "",
                     "restrictions": rule.restrictions or "",
                 },
-                owner_view,
+                True,
             )
 
         for force in roster.force_ids:
@@ -152,6 +149,22 @@ class Wh40kRoster(models.Model):
             for det in force.detachment_ids:
                 for rule in det.detachment_rule_ids:
                     rules.append(pack_rule(rule, "detachment"))
+        return rules
+
+    def to_detail_dict(self, partner=None):
+        """Full datasheet dump for PWA. Enforces owner/participant access."""
+        self.ensure_one()
+        partner = partner or self.env.user.partner_id
+        self.check_detail_access(partner)
+        # Opponent may lack ACL on foreign roster rows; serialize after explicit check.
+        roster = self
+        if roster.partner_id.id != partner.id:
+            roster = self.sudo()
+        units = []
+        rules = roster.rules_payload()
+
+        for force in roster.force_ids:
+            for det in force.detachment_ids:
                 for unit in det.unit_ids:
                     models_payload = []
                     for model in unit.model_ids:

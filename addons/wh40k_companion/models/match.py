@@ -6,7 +6,6 @@ from datetime import timedelta
 from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
 
-from ..catalogues.rules_catalogue import strip_rule_prose
 from ..utils.public_url import is_loopback_base, is_private_base
 
 _logger = logging.getLogger(__name__)
@@ -868,10 +867,16 @@ class Wh40kMatch(models.Model):
             if self.state == "waiting"
             else None
         )
-        # Catalogue prose (army body, detachment body, stratagem when/target/effect)
-        # is owner-only. Match state is shared with the opponent, so those keys
-        # are removed even if a roster payload starts carrying them.
-        return strip_rule_prose({
+        # Both players see the same army, detachment, and stratagem text.
+        # Read rosters with sudo: the opponent's rows are outside player ACL.
+        shared = self.sudo()
+        host_rules = (
+            shared.host_roster_id.rules_payload() if shared.host_roster_id else []
+        )
+        guest_rules = (
+            shared.guest_roster_id.rules_payload() if shared.guest_roster_id else []
+        )
+        return {
             "id": self.id,
             "state": self.state,
             "points": self.points,
@@ -903,8 +908,10 @@ class Wh40kMatch(models.Model):
             }
             if self.guest_id
             else None,
-            "host_roster_id": self.host_roster_id.id,
-            "guest_roster_id": self.guest_roster_id.id,
+            "host_roster_id": shared.host_roster_id.id,
+            "guest_roster_id": shared.guest_roster_id.id,
+            "host_rules": host_rules,
+            "guest_rules": guest_rules,
             "winner_id": self.winner_id.id if self.winner_id else None,
             "winner_nickname": (
                 (self.winner_id.wh40k_nickname or self.winner_id.name)
@@ -916,7 +923,7 @@ class Wh40kMatch(models.Model):
             "unit_state": unit_state,
             "lines_rev": self._lines_rev(),
             "is_host": self.host_id.id == partner.id,
-        })
+        }
 
     def to_surrender_result_dict(self, partner):
         self.ensure_one()

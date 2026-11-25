@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 from pathlib import Path
 
@@ -44,31 +43,51 @@ def main():
     missing = PROSE - found
     if missing:
         raise SystemExit(f"owner catalogue missing {missing}")
-    leaked = set()
-    prose_keys(public, leaked)
-    if leaked:
-        raise SystemExit(f"public catalogue still has {leaked}")
+    if public["bundle"] != owner["bundle"] or public["factionCount"] != owner["factionCount"]:
+        raise SystemExit("public catalogue differs from the owner catalogue")
     wolves = next(row for row in public["factions"] if row["id"] == "space-wolves")
     if wolves["armyRule"]["name"] != "Combat Doctrines":
         raise SystemExit("space wolves army rule name")
-    if "body" in wolves["armyRule"] or "ruleBody" in wolves["detachments"][0]:
-        raise SystemExit("public space wolves still has prose")
-    sample = {
-        "mission": {"name": "Take and Hold", "description": "Hold the objective."},
-        "armyRule": {"name": "Combat Doctrines", "body": "SECRET BODY"},
-        "stratagems": [{"name": "Fangs", "cp": "1CP", "when": "WHEN", "effect": "EFFECT"}],
-    }
-    stripped = module.strip_rule_prose(sample)
-    blob = json.dumps(stripped)
-    if "SECRET BODY" in blob or "WHEN" in blob or "EFFECT" in blob:
-        raise SystemExit(f"strip left prose in {blob}")
-    if stripped["mission"]["description"] != "Hold the objective.":
-        raise SystemExit("strip removed a non-catalogue field")
-    if "strip_rule_prose(" not in (
+    body = wolves["armyRule"].get("body") or ""
+    det = wolves["detachments"][0]
+    strat = det["stratagems"][0]
+    if len(body) < 20 or not det.get("ruleBody"):
+        raise SystemExit("catalogue missing army or detachment body")
+    if not strat.get("name") or not strat.get("cp"):
+        raise SystemExit("stratagem missing name or cp")
+    for key in ("when", "target", "effect"):
+        if not strat.get(key):
+            raise SystemExit(f"stratagem missing {key}")
+    viewer = module.rule_for_viewer(
+        {
+            "name": wolves["armyRule"]["name"],
+            "scope": "army",
+            "description": body,
+            "cp": strat["cp"],
+            "when": strat["when"],
+            "target": strat["target"],
+            "effect": strat["effect"],
+        },
+        False,
+    )
+    if viewer["name"] != "Combat Doctrines" or viewer.get("cp") != strat["cp"]:
+        raise SystemExit("viewer payload missing name or cp")
+    if viewer.get("description") != body:
+        raise SystemExit("viewer payload missing army body")
+    if (
+        viewer.get("when") != strat["when"]
+        or viewer.get("target") != strat["target"]
+        or viewer.get("effect") != strat["effect"]
+    ):
+        raise SystemExit("viewer payload missing stratagem prose")
+    match_src = (
         ROOT / "addons" / "wh40k_companion" / "models" / "match.py"
-    ).read_text(encoding="utf-8"):
-        raise SystemExit("match state does not strip catalogue prose")
-    print("ok factions", owner["factionCount"], "public prose", sorted(leaked))
+    ).read_text(encoding="utf-8")
+    if "strip_rule_prose(" in match_src:
+        raise SystemExit("match state still strips catalogue prose")
+    if "host_rules" not in match_src or "guest_rules" not in match_src:
+        raise SystemExit("match state does not carry roster rules")
+    print("ok factions", owner["factionCount"], "shared prose", sorted(found))
 
 
 if __name__ == "__main__":

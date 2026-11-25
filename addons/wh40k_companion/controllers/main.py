@@ -266,12 +266,11 @@ class Wh40kCompanionController(http.Controller):
 
     # ================================================================ JSON API
     def _api_rules_catalogue(self, **kwargs):
-        """Owner rules reference. Not included in match state.
+        """Rules reference for the signed-in player.
 
-        The signed-in player is loading the catalogue for their own lists.
         Army-rule bodies, detachment rule bodies, and stratagem when/target/effect
-        stay on this response. ``wh40k.match.to_state_dict`` strips those keys
-        before a payload is shared with the opponent.
+        stay on this response. Match state and roster detail send the same
+        fields to the list owner and the opponent.
         """
         self._partner()
         return self._ok(catalogue=owner_catalogue())

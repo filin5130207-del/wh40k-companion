@@ -3,10 +3,6 @@ from pathlib import Path
 
 from odoo.tests.common import TransactionCase, tagged
 
-from odoo.addons.wh40k_companion.catalogues.rules_catalogue import (
-    rule_for_viewer,
-    strip_rule_prose,
-)
 from odoo.addons.wh40k_companion.parsers.roster_text import readable
 
 from .common import Wh40kPlayerMixin
@@ -24,7 +20,7 @@ class TestRosterTextImport(Wh40kPlayerMixin, TransactionCase):
         super().setUpClass()
         cls._setup_wh40k_players()
 
-    def test_text_import_owner_rules_stay_off_opponent_and_match(self):
+    def test_text_import_shares_rules_with_opponent_and_match(self):
         text = _fixture("gg.txt")
         roster = self.env["wh40k.roster"].action_import_text(
             self.user_a.partner_id, text
@@ -40,9 +36,13 @@ class TestRosterTextImport(Wh40kPlayerMixin, TransactionCase):
         self.assertEqual(army["name"], "Combat Doctrines")
         self.assertGreater(len(army["description"]), 40)
         stratagem = next(rule for rule in owner["rules"] if rule["scope"] == "stratagem")
+        self.assertTrue(stratagem.get("name"))
+        self.assertTrue(stratagem.get("cp"))
         self.assertTrue(stratagem.get("when"))
         self.assertTrue(stratagem.get("target"))
         self.assertTrue(stratagem.get("effect"))
+        detachment = next(rule for rule in owner["rules"] if rule["scope"] == "detachment")
+        self.assertGreater(len(detachment["description"]), 20)
         body = army["description"]
         effect = stratagem["effect"]
         prose_needle = "assault doctrine is active"
@@ -53,26 +53,30 @@ class TestRosterTextImport(Wh40kPlayerMixin, TransactionCase):
         match = self._activate_match(
             self.user_a, self.user_b, roster, guest_roster
         )
-        state = match.to_state_dict(self.user_b.partner_id)
-        state_blob = json.dumps(state)
-        self.assertNotIn(body[:80], state_blob)
-        self.assertNotIn(prose_needle, state_blob)
-        public_state = strip_rule_prose(state)
-        self.assertNotIn(body[:80], json.dumps(public_state))
-        self.assertNotIn(prose_needle, json.dumps(public_state))
+        opponent = roster.with_user(self.user_b).to_detail_dict(self.user_b.partner_id)
+        self.assertEqual(opponent["rules"], owner["rules"])
 
-        opponent = roster.to_detail_dict(self.user_b.partner_id)
-        for rule in opponent["rules"]:
-            self.assertNotIn("description", rule)
-            self.assertNotIn("when", rule)
-            self.assertNotIn("target", rule)
-            self.assertNotIn("effect", rule)
-            self.assertNotIn("body", rule)
-            self.assertNotIn("ruleBody", rule)
-        opponent_blob = json.dumps(opponent)
-        self.assertNotIn(body[:80], opponent_blob)
-        self.assertNotIn(prose_needle, opponent_blob)
-        self.assertIn("Combat Doctrines", opponent_blob)
+        state = match.with_user(self.user_b).to_state_dict(self.user_b.partner_id)
+        owner_state = match.with_user(self.user_a).to_state_dict(self.user_a.partner_id)
+        self.assertEqual(state["host_rules"], owner["rules"])
+        self.assertEqual(owner_state["host_rules"], owner["rules"])
+        self.assertEqual(state["guest_rules"], owner_state["guest_rules"])
+        self.assertTrue(
+            any("Fight harder" in (rule.get("description") or "") for rule in state["guest_rules"])
+        )
+        self.assertTrue(
+            any("More Dakka" in (rule.get("description") or "") for rule in state["guest_rules"])
+        )
+        watched = match.with_user(self.user_b).watch_payload(
+            self.user_b.partner_id,
+            since_write_date="2000-01-01 00:00:00",
+            since_rev=0,
+            wait=False,
+        )
+        self.assertTrue(watched["changed"])
+        self.assertFalse(watched["lines_only"])
+        self.assertEqual(watched["match"]["host_rules"], owner["rules"])
+        self.assertEqual(watched["match"]["guest_rules"], state["guest_rules"])
 
         logan = next(unit for unit in owner["units"] if unit["name"] == "Logan Grimnar")
         self.assertEqual(logan["models"][0]["M"], '6"')
@@ -103,13 +107,7 @@ class TestRosterTextImport(Wh40kPlayerMixin, TransactionCase):
         self.assertEqual(opp_shield["name"].lower(), "storm shield")
         for key in ("range", "A", "skill", "S", "AP", "D"):
             self.assertFalse(opp_shield[key])
-        self.assertNotIn('"when"', state_blob)
-        self.assertNotIn('"target"', state_blob)
-        self.assertNotIn('"effect"', state_blob)
-        self.assertNotIn(
-            "description",
-            rule_for_viewer(
-                {"name": "Combat Doctrines", "scope": "army", "description": readable(body)},
-                False,
-            ),
+        self.assertEqual(
+            readable(body),
+            next(rule["description"] for rule in opponent["rules"] if rule["scope"] == "army"),
         )

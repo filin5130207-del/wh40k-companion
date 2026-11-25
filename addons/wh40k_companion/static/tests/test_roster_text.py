@@ -21,7 +21,6 @@ sys.modules["wh40k_companion"] = pkg
 from wh40k_companion.catalogues.rules_catalogue import (  # noqa: E402
     load_catalogue,
     rule_for_viewer,
-    strip_rule_prose,
 )
 from wh40k_companion.parsers.roster_text import (  # noqa: E402
     RosterTextParser,
@@ -30,7 +29,6 @@ from wh40k_companion.parsers.roster_text import (  # noqa: E402
 )
 
 FIXTURES = ADDON / "testdata" / "text_rosters"
-PROSE_KEYS = ("body", "ruleBody", "when", "target", "effect", "description")
 
 
 def load(name: str) -> str:
@@ -48,19 +46,6 @@ def storm_shields(matched) -> list[str]:
             status = (item.get("match") or {}).get("status")
             rows.append(f"{unit['name']}:{status}")
     return rows
-
-
-def prose_keys(value, found=None):
-    found = found if found is not None else set()
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if key in PROSE_KEYS and item:
-                found.add(key)
-            prose_keys(item, found)
-    elif isinstance(value, list):
-        for item in value:
-            prose_keys(item, found)
-    return found
 
 
 class RosterTextTest(unittest.TestCase):
@@ -102,7 +87,7 @@ class RosterTextTest(unittest.TestCase):
         self.assertTrue(all(row.endswith(":unmatched") for row in auf_shields), auf_shields)
         self.assertTrue(any("Storm Shield" in row for row in unmatched_gear(self.gg)))
 
-    def test_import_keeps_profiles_and_owner_rules_only(self):
+    def test_import_keeps_profiles_and_shared_rules(self):
         imported = RosterTextParser(load("gg.txt"), self.catalogue).parse()
         force = imported["forces"][0]
         self.assertEqual(force["catalogue_name"], "Space Wolves")
@@ -176,13 +161,48 @@ class RosterTextTest(unittest.TestCase):
                 "name": force["army_rules"][0]["name"],
                 "scope": "army",
                 "description": body,
-                "when": effect,
+                "cp": stratagems[0]["cp"],
+                "when": stratagems[0]["when"],
                 "target": stratagems[0]["target"],
                 "effect": effect,
             },
             False,
         )
+        self.assertEqual(rule_for_viewer(
+            {
+                "name": stratagems[0]["name"],
+                "scope": "stratagem",
+                "cp": stratagems[0]["cp"],
+                "when": stratagems[0]["when"],
+                "target": stratagems[0]["target"],
+                "effect": effect,
+                "restrictions": stratagems[0]["restrictions"],
+            },
+            True,
+        ), rule_for_viewer(
+            {
+                "name": stratagems[0]["name"],
+                "scope": "stratagem",
+                "cp": stratagems[0]["cp"],
+                "when": stratagems[0]["when"],
+                "target": stratagems[0]["target"],
+                "effect": effect,
+                "restrictions": stratagems[0]["restrictions"],
+            },
+            False,
+        ))
         self.assertEqual(owner["effect"], effect)
+        self.assertEqual(owner["name"], stratagems[0]["name"])
+        self.assertEqual(owner["cp"], stratagems[0]["cp"])
+        self.assertEqual(owner["when"], stratagems[0]["when"])
+        self.assertEqual(owner["target"], stratagems[0]["target"])
+        self.assertEqual(opponent["name"], force["army_rules"][0]["name"])
+        self.assertEqual(opponent["cp"], stratagems[0]["cp"])
+        self.assertEqual(opponent["description"], body)
+        self.assertEqual(opponent["when"], stratagems[0]["when"])
+        self.assertEqual(opponent["target"], stratagems[0]["target"])
+        self.assertEqual(opponent["effect"], effect)
+        self.assertIn(body[:60], json.dumps(opponent))
         self.assertEqual(imported["points_used"], 1945)
         self.assertEqual(imported["points_limit"], 2000)
         auf_import = RosterTextParser(load("aufsky-drift.txt"), self.catalogue).parse()
@@ -191,31 +211,15 @@ class RosterTextTest(unittest.TestCase):
         for unit in auf_units:
             self.assertTrue(unit["models"], unit["name"])
             self.assertTrue(any(model["toughness"] for model in unit["models"]), unit["name"])
-        self.assertNotIn("when", opponent)
-        self.assertNotIn("target", opponent)
-        self.assertNotIn("effect", opponent)
-        self.assertNotIn("description", opponent)
-        self.assertNotIn(body[:60], json.dumps(opponent))
-        leaked = {
+        shared = {
             "state": "active",
             "mission": {"name": "Take and Hold", "description": "Hold the centre."},
-            "rules": [
-                {
-                    "name": "Combat Doctrines",
-                    "scope": "army",
-                    "description": body,
-                    "when": stratagems[0]["when"],
-                    "target": stratagems[0]["target"],
-                    "effect": effect,
-                }
-            ],
+            "rules": [opponent],
         }
-        public = strip_rule_prose(leaked)
-        self.assertEqual(public["mission"]["description"], "Hold the centre.")
-        self.assertNotIn("description", public["rules"][0])
-        self.assertNotIn("when", public["rules"][0])
-        self.assertNotIn("effect", public["rules"][0])
-        self.assertFalse(prose_keys(public["rules"]))
+        self.assertEqual(shared["mission"]["description"], "Hold the centre.")
+        self.assertEqual(shared["rules"][0]["description"], body)
+        self.assertEqual(shared["rules"][0]["when"], stratagems[0]["when"])
+        self.assertEqual(shared["rules"][0]["effect"], effect)
 
 
 if __name__ == "__main__":
