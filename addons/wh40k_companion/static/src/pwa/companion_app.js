@@ -29,6 +29,7 @@ import {
     emptyJoinState,
     unitCharacteristicLines as linesForProfiles,
     modelCharacteristicLine as lineForModel,
+    weaponRowsFromModels,
     charScope,
     toggleSquadCharacteristics,
     toggleModelCharacteristics,
@@ -389,23 +390,20 @@ export class Wh40kCompanionApp extends Component {
         return "wh40k-result-loss";
     }
 
-    weaponLabel(w) {
-        return (
-            " | " +
-            (w.weapon_type || "-") +
-            " | R " +
-            (w.range || "-") +
-            " | A " +
-            (w.A || "-") +
-            " | " +
-            (w.skill || "-") +
-            " | S " +
-            (w.S || "-") +
-            " | AP " +
-            (w.AP || "-") +
-            " | D " +
-            (w.D || "-")
-        );
+    rosterWeaponRows(unit) {
+        return weaponRowsFromModels(unit && unit.models, true);
+    }
+
+    weaponRowsForModel(model) {
+        return weaponRowsFromModels(model ? [model] : [], true);
+    }
+
+    matchWeaponRows(unit) {
+        if (!this.isOwnUnit(unit)) {
+            return [];
+        }
+        const detail = this.findUnitDetail(unit);
+        return weaponRowsFromModels(detail && detail.models, true);
     }
 
     missionName() {

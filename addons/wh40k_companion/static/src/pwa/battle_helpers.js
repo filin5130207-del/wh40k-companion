@@ -561,6 +561,58 @@ function formatCharacteristicLine(name, bits) {
     return bits.join(" · ") || name;
 }
 
+function statText(raw) {
+    if (raw == null || raw === false) {
+        return "";
+    }
+    return String(raw).trim();
+}
+
+/**
+ * Chosen weapon columns already stored on the roster.
+ * Empty values stay empty. A shield with no profile is still a row.
+ */
+export function weaponStatCells(weapon) {
+    const row = weapon || {};
+    return {
+        name: statText(row.name) || "Weapon",
+        range: statText(row.range),
+        attacks: statText(row.A != null && row.A !== false ? row.A : row.attacks),
+        skill: statText(row.skill),
+        strength: statText(row.S != null && row.S !== false ? row.S : row.strength),
+        ap: statText(row.AP != null && row.AP !== false ? row.AP : row.ap),
+        damage: statText(row.D != null && row.D !== false ? row.D : row.damage),
+    };
+}
+
+/**
+ * One row per chosen weapon on the unit's models.
+ * A second model name is shown only when that model has its own weapons.
+ * ``ownArmy`` false hides the block. The roster tab passes true.
+ */
+export function weaponRowsFromModels(models, ownArmy = true) {
+    if (!ownArmy) {
+        return [];
+    }
+    const list = Array.isArray(models) ? models : [];
+    const armed = list.filter((model) => model && (model.weapons || []).length);
+    const multi = armed.length > 1;
+    const rows = [];
+    list.forEach((model, modelIndex) => {
+        const weapons = (model && model.weapons) || [];
+        weapons.forEach((weapon, weaponIndex) => {
+            const cells = weaponStatCells(weapon);
+            const modelName = multi ? statText(model && model.name) : "";
+            rows.push({
+                key: `${(model && model.id) || modelIndex}-${weaponIndex}-${cells.name}`,
+                model: modelName && weaponIndex === 0 ? modelName : "",
+                ...cells,
+            });
+        });
+    });
+    return rows;
+}
+
 /** One readable line per model: ``T 4 · Sv 3+ · W 2`` and the other columns. */
 export function unitCharacteristicLines(unit) {
     const profiles = (unit && unit.profiles) || [];

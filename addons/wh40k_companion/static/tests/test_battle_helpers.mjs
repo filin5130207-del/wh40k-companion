@@ -391,6 +391,69 @@ check("squad header opens every model and a miniature opens only itself", () => 
     assert.equal(mod.charScope({ 4: true }, "4"), "all");
 });
 
+check("chosen weapons keep stored stats and an empty shield stays a row", () => {
+    const bolt = mod.weaponStatCells({
+        name: "Bolt rifle",
+        range: '24"',
+        A: "2",
+        skill: "3+",
+        S: "4",
+        AP: "-1",
+        D: "1",
+    });
+    assert.equal(bolt.name, "Bolt rifle");
+    assert.equal(bolt.range, '24"');
+    assert.equal(bolt.attacks, "2");
+    assert.equal(bolt.skill, "3+");
+    assert.equal(bolt.strength, "4");
+    assert.equal(bolt.ap, "-1");
+    assert.equal(bolt.damage, "1");
+
+    const shield = mod.weaponStatCells({
+        name: "Storm Shield",
+        weapon_type: "melee",
+        range: false,
+        A: false,
+        skill: "",
+        S: false,
+        AP: "",
+        D: false,
+    });
+    assert.equal(shield.name, "Storm Shield");
+    for (const key of ["range", "attacks", "skill", "strength", "ap", "damage"]) {
+        assert.equal(shield[key], "");
+    }
+
+    const models = [
+        {
+            id: 1,
+            name: "Wolf Guard Terminator",
+            weapons: [
+                { name: "Storm bolter", range: '24"', A: "2", skill: "3+", S: "4", AP: "0", D: "1" },
+                { name: "Storm Shield", range: "", A: "", skill: "", S: "", AP: "", D: "" },
+            ],
+        },
+        {
+            id: 2,
+            name: "Wolf Guard Terminator Pack Leader",
+            weapons: [{ name: "Thunder hammer", range: "Melee", A: "3", skill: "3+", S: "8", AP: "-2", D: "2" }],
+        },
+    ];
+    const rows = mod.weaponRowsFromModels(models, true);
+    assert.equal(rows.length, 3);
+    assert.equal(rows[0].model, "Wolf Guard Terminator");
+    assert.equal(rows[1].name, "Storm Shield");
+    assert.equal(rows[1].model, "");
+    assert.equal(rows[1].attacks, "");
+    assert.equal(rows[1].damage, "");
+    assert.equal(rows[2].model, "Wolf Guard Terminator Pack Leader");
+    assert.equal(rows[2].attacks, "3");
+    assert.equal(mod.weaponRowsFromModels(models, false).length, 0);
+    const single = mod.weaponRowsFromModels([models[0]], true);
+    assert.equal(single[0].model, "");
+    assert.equal(single[1].name, "Storm Shield");
+});
+
 check("the squad card has no characteristics button", () => {
     const xml = readFileSync(join(here, "../src/pwa/companion_templates.xml"), "utf8");
     const start = xml.indexOf('t-name="wh40k_companion.SquadCard"');
@@ -410,6 +473,8 @@ check("the squad card has no characteristics button", () => {
     assert.equal(card.includes("openDatasheet"), false);
     assert.match(card, /class="wh40k-muted wh40k-unit-chars"/);
     assert.equal(card.includes("wh40k-roster-char"), false);
+    assert.match(card, /matchWeaponRows\(unit\)/);
+    assert.match(card, /t-call="wh40k_companion\.WeaponLines"/);
 });
 
 check("roster datasheet colors stay off the match screen", () => {
@@ -419,6 +484,21 @@ check("roster datasheet colors stay off the match screen", () => {
     const roster = xml.slice(rosterStart, rosterEnd);
     assert.match(roster, /wh40k_companion\.RosterDatasheetModal/);
     assert.equal(roster.includes('t-call="wh40k_companion.DatasheetModal"'), false);
+    assert.match(roster, /rosterWeaponRows\(unit\)/);
+    assert.match(roster, /t-call="wh40k_companion\.WeaponLines"/);
+
+    const linesStart = xml.indexOf('t-name="wh40k_companion.WeaponLines"');
+    const linesEnd = xml.indexOf('t-name="wh40k_companion.RosterDatasheetModal"');
+    const lines = xml.slice(linesStart, linesEnd);
+    for (const label of ["Range", "A", "Skill", "S", "AP", "D"]) {
+        assert.ok(lines.includes(label));
+    }
+    assert.match(lines, /weapon\.range/);
+    assert.match(lines, /weapon\.attacks/);
+    assert.match(lines, /weapon\.skill/);
+    assert.match(lines, /weapon\.strength/);
+    assert.match(lines, /weapon\.ap/);
+    assert.match(lines, /weapon\.damage/);
 
     const gameStart = xml.indexOf('t-name="wh40k_companion.GameScreen"');
     const gameEnd = xml.indexOf('t-name="wh40k_companion.MatchResultScreen"');
