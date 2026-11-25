@@ -12,7 +12,7 @@ create matches with QR join codes, and track wounds during games.
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
 20.0.1.29.0 highlights:
-- The roster tab and the owner's army in a match list each unit's chosen weapons (name, range, A, skill, S, AP, D). Empty stored stats stay empty, including Storm Shield. Match state and the opponent roster payload still omit army-rule bodies and stratagem when/target/effect.
+- The roster tab and the owner's army in a match have an Оружие button on each unit. It opens that unit's chosen weapons (name, range, A, skill, S, AP, D). Empty stored stats stay empty, including Storm Shield. The opponent's units have neither the button nor the list. Match state and the opponent roster payload still omit army-rule bodies and stratagem when/target/effect.
 20.0.1.28.0 highlights:
 - Text export from the official app or New Recruit imports as a roster. Units, model profiles, weapons, detachments, the army rule, and stratagems resolve against the catalogue. The signed-in owner sees that rule text. Match state and the opponent roster payload do not include army-rule bodies, detachment rule bodies, or stratagem when/target/effect.
 20.0.1.27.0 highlights:

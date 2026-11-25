@@ -852,6 +852,7 @@ export function createInitialState(initialJoinToken = "") {
         // Squad header stores "all". A miniature stores its model key. Absent is closed.
         openChars: {},
         openModels: {},
+        openWeapons: {},
         showSurrenderModal: false,
         showDrawModal: false,
         result: {

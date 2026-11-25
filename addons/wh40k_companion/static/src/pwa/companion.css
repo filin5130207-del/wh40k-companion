@@ -544,6 +544,7 @@
 }
 
 .wh40k-readonly-hint {
+    display: block;
     margin-top: 0.4rem;
     font-size: 0.75rem;
 }

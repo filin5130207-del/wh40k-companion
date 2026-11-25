@@ -69,6 +69,7 @@ check("extractJoinToken from query / path / storage", () => {
 
 check("createInitialState seeds join token", () => {
     const state = mod.createInitialState("tok-1");
+    assert.deepEqual(state.openWeapons, {});
     assert.equal(state.join.token, "tok-1");
     assert.equal(state.join.step, "loading");
     assert.equal(state.screen, "home");
@@ -473,8 +474,17 @@ check("the squad card has no characteristics button", () => {
     assert.equal(card.includes("openDatasheet"), false);
     assert.match(card, /class="wh40k-muted wh40k-unit-chars"/);
     assert.equal(card.includes("wh40k-roster-char"), false);
+    assert.match(card, /isOwnUnit\(unit\)/);
+    assert.match(card, /toggleWeapons\(unit\)/);
+    assert.match(card, />\s*Оружие\s*</);
+    assert.match(card, /isOwnUnit\(unit\) and this\.weaponsOpen\(unit\)/);
     assert.match(card, /matchWeaponRows\(unit\)/);
     assert.match(card, /t-call="wh40k_companion\.WeaponLines"/);
+    const weaponButton = card.indexOf(">Оружие<") === -1
+        ? card.indexOf("Оружие")
+        : card.indexOf("Оружие");
+    const ownGate = card.lastIndexOf("isOwnUnit(unit)", weaponButton);
+    assert.ok(ownGate !== -1 && ownGate < weaponButton);
 });
 
 check("roster datasheet colors stay off the match screen", () => {
@@ -484,8 +494,14 @@ check("roster datasheet colors stay off the match screen", () => {
     const roster = xml.slice(rosterStart, rosterEnd);
     assert.match(roster, /wh40k_companion\.RosterDatasheetModal/);
     assert.equal(roster.includes('t-call="wh40k_companion.DatasheetModal"'), false);
+    assert.match(roster, /toggleWeapons\(unit\)/);
+    assert.match(roster, /weaponsOpen\(unit\)/);
+    assert.match(roster, />\s*Оружие\s*</);
     assert.match(roster, /rosterWeaponRows\(unit\)/);
     assert.match(roster, /t-call="wh40k_companion\.WeaponLines"/);
+    const rosterWeapons = roster.indexOf("rosterWeaponRows(unit)");
+    const rosterGate = roster.lastIndexOf("weaponsOpen(unit)", rosterWeapons);
+    assert.ok(rosterGate !== -1 && rosterGate < rosterWeapons);
 
     const linesStart = xml.indexOf('t-name="wh40k_companion.WeaponLines"');
     const linesEnd = xml.indexOf('t-name="wh40k_companion.RosterDatasheetModal"');
