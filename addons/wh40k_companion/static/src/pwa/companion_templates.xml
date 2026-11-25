@@ -583,7 +583,12 @@
                                 <div class="wh40k-rule-block">
                                     <strong t-out="rule.name"/>
                                     <span class="wh40k-muted" t-out="' (' + rule.scope + (rule.cp ? ' · ' + rule.cp : '') + ')'"/>
-                                    <div t-if="rule.restrictions" class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.restrictions"/>
+                                    <div t-if="rule.flavor" class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.flavor"/>
+                                    <div t-if="rule.description" class="wh40k-muted" style="white-space: pre-wrap;" t-out="rule.description"/>
+                                    <div t-if="rule.when" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'When: ' + rule.when"/>
+                                    <div t-if="rule.target" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'Target: ' + rule.target"/>
+                                    <div t-if="rule.effect" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'Effect: ' + rule.effect"/>
+                                    <div t-if="rule.restrictions" class="wh40k-muted" style="white-space: pre-wrap;" t-out="'Restrictions: ' + rule.restrictions"/>
                                 </div>
                             </t>
                             <p t-if="!this.oppRules.length" class="wh40k-muted">Нет army/detachment правил у противника.</p>

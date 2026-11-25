@@ -110,20 +110,20 @@ check("catalogue covers every faction in the snapshot", () => {
     }
 });
 
-check("public copy drops rule prose and keeps stats", () => {
+check("shared copy keeps rule prose and stats", () => {
     const ownerKeys = proseKeys(catalogue);
     for (const key of PROSE) assert.ok(ownerKeys.has(key), key);
-    const pub = mod.stripRuleProse(catalogue);
-    assert.equal(proseKeys(pub).size, 0);
-    const wolves = pub.factions.find((faction) => faction.id === "space-wolves");
+    const wolves = catalogue.factions.find((faction) => faction.id === "space-wolves");
     assert.equal(wolves.armyRule.name, "Combat Doctrines");
-    assert.equal(wolves.armyRule.body, undefined);
+    assert.ok(wolves.armyRule.body.length > 20);
     const det = wolves.detachments[0];
     assert.ok(det.ruleName);
-    assert.equal(det.ruleBody, undefined);
+    assert.ok(det.ruleBody.length > 20);
     assert.ok(det.stratagems[0].name);
-    assert.equal(det.stratagems[0].when, undefined);
-    assert.equal(det.stratagems[0].effect, undefined);
+    assert.ok(det.stratagems[0].cp);
+    assert.ok(det.stratagems[0].when);
+    assert.ok(det.stratagems[0].target);
+    assert.ok(det.stratagems[0].effect);
     assert.equal(typeof det.stratagems[0].restrictions, "string");
     const unit = wolves.units[0];
     assert.ok(unit.profiles[0].t);
@@ -152,10 +152,14 @@ check("space wolves paste still resolves, including shared and deathwatch units"
     assert.equal(terminators.source, "space-marines");
     const deathwatch = gg.units.find((unit) => unit.name === "Deathwatch Terminator Squad");
     assert.equal(deathwatch.source, "deathwatch");
-    const stripped = mod.stripRuleProse(gg);
-    assert.equal(proseKeys(stripped).size, 0);
-    assert.equal(stripped.meta.armyRule.name, "Combat Doctrines");
-    assert.equal(stripped.detachments[0].stratagems[0].cp.length > 0, true);
+    assert.ok(gg.meta.armyRule.body.length > 40);
+    assert.ok(gg.detachments[0].ruleBody.length > 20);
+    const strat = gg.detachments[0].stratagems[0];
+    assert.ok(strat.name);
+    assert.equal(strat.cp.length > 0, true);
+    assert.ok(strat.when);
+    assert.ok(strat.target);
+    assert.ok(strat.effect);
 });
 
 check("new recruit space wolves text resolves the same books", () => {

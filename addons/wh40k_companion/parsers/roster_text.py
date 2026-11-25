@@ -3,8 +3,8 @@
 The line rules follow ``roster-text-mock/parse.js``: labeled configuration
 (New Recruit) and the headerless official-app paste. Names are resolved
 against the rules catalogue. Army-rule bodies and stratagem when/target/effect
-are kept on the import dict so the owner can read them, and
-``rule_for_viewer`` drops that prose for anyone else.
+are kept on the import dict. ``rule_for_viewer`` sends that same text to the
+list owner and the opponent.
 """
 
 from __future__ import annotations

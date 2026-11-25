@@ -1,32 +1,5 @@
 /** @odoo-module **/
 
-const PROSE_KEYS = new Set(["body", "ruleBody", "when", "target", "effect"]);
-
-const SCOPED_PROSE = new Set([...PROSE_KEYS, "description", "flavor"]);
-
-/** Drop army-rule body, detachment rule body, and stratagem when/target/effect. */
-export function stripRuleProse(value) {
-  if (Array.isArray(value)) {
-    return value.map((item) => stripRuleProse(item));
-  }
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-  const drop =
-    value.scope === "army" || value.scope === "detachment" || value.scope === "stratagem"
-      ? SCOPED_PROSE
-      : PROSE_KEYS;
-  const out = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (drop.has(key)) {
-      continue;
-    }
-    out[key] = stripRuleProse(item);
-  }
-  return out;
-}
-
-
   const BATTLE_SIZES = ["combat patrol", "incursion", "strike force", "onslaught", "strikeforce"];
   const MISSIONS = [
     "disruption",
