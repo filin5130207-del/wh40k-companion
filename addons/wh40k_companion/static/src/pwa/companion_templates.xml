@@ -406,14 +406,14 @@
                     t-on-click.stop="() => this.toggleModels(unit)">
                 Модели
             </button>
-            <button t-if="this.isOwnUnit(unit)" type="button" class="wh40k-btn"
+            <button type="button" class="wh40k-btn"
                     t-att-class="{'active': this.weaponsOpen(unit)}"
                     t-att-aria-expanded="this.weaponsOpen(unit) ? 'true' : 'false'"
                     t-on-click.stop="() => this.toggleWeapons(unit)">
                 Оружие
             </button>
         </div>
-        <t t-if="this.isOwnUnit(unit) and this.weaponsOpen(unit)">
+        <t t-if="this.weaponsOpen(unit)">
             <div class="wh40k-char-panel" t-on-click.stop="">
                 <t t-set="weaponRows" t-value="this.matchWeaponRows(unit)"/>
                 <t t-call="wh40k_companion.WeaponLines"/>
@@ -481,7 +481,7 @@
             </div>
         </div>
         <p class="wh40k-muted" t-out="this.missionName()"/>
-        <p class="wh40k-swipe-hint">Свайп влево/вправо или вкладки — ваш ростер ↔ противник. Иконка § переключает юниты и правила. На вашем ростере кнопка «Оружие» показывает выбранное оружие отряда. Нажатие на отряд показывает характеристики всех его моделей. Нажатие на модель в списке «Модели» показывает только её характеристики. «Модели» меняет каждую миниатюру: +M, −M, +W, −W, уничтожить, отменить. Это могут делать оба игрока.</p>
+        <p class="wh40k-swipe-hint">Свайп влево/вправо или вкладки — ваш ростер ↔ противник. Иконка § переключает юниты и правила. Кнопка «Оружие» показывает выбранное оружие отряда на вашем ростере и у противника. Нажатие на отряд показывает характеристики всех его моделей. Нажатие на модель в списке «Модели» показывает только её характеристики. «Модели» меняет каждую миниатюру: +M, −M, +W, −W, уничтожить, отменить. Это могут делать оба игрока.</p>
     </section>
 
     <div class="wh40k-game" t-att-data-side="this.state.gameSide">

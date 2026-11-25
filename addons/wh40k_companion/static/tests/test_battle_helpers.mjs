@@ -449,7 +449,12 @@ check("chosen weapons keep stored stats and an empty shield stays a row", () => 
     assert.equal(rows[1].damage, "");
     assert.equal(rows[2].model, "Wolf Guard Terminator Pack Leader");
     assert.equal(rows[2].attacks, "3");
-    assert.equal(mod.weaponRowsFromModels(models, false).length, 0);
+    const shared = mod.weaponRowsFromModels(models, false);
+    assert.equal(shared.length, 3);
+    assert.equal(shared[1].name, "Storm Shield");
+    assert.equal(shared[1].range, "");
+    assert.equal(shared[1].attacks, "");
+    assert.equal(shared[1].damage, "");
     const single = mod.weaponRowsFromModels([models[0]], true);
     assert.equal(single[0].model, "");
     assert.equal(single[1].name, "Storm Shield");
@@ -474,17 +479,23 @@ check("the squad card has no characteristics button", () => {
     assert.equal(card.includes("openDatasheet"), false);
     assert.match(card, /class="wh40k-muted wh40k-unit-chars"/);
     assert.equal(card.includes("wh40k-roster-char"), false);
-    assert.match(card, /isOwnUnit\(unit\)/);
+    assert.equal(card.includes("isOwnUnit"), false);
     assert.match(card, /toggleWeapons\(unit\)/);
     assert.match(card, />\s*Оружие\s*</);
-    assert.match(card, /isOwnUnit\(unit\) and this\.weaponsOpen\(unit\)/);
+    assert.match(card, /t-if="this\.weaponsOpen\(unit\)"/);
+    assert.equal(/isOwnUnit\(unit\) and this\.weaponsOpen\(unit\)/.test(card), false);
     assert.match(card, /matchWeaponRows\(unit\)/);
     assert.match(card, /t-call="wh40k_companion\.WeaponLines"/);
-    const weaponButton = card.indexOf(">Оружие<") === -1
-        ? card.indexOf("Оружие")
-        : card.indexOf("Оружие");
-    const ownGate = card.lastIndexOf("isOwnUnit(unit)", weaponButton);
-    assert.ok(ownGate !== -1 && ownGate < weaponButton);
+    const weaponButton = card.indexOf("Оружие");
+    const weaponOpen = card.indexOf('t-if="this.weaponsOpen(unit)"');
+    assert.ok(weaponButton !== -1 && weaponOpen > weaponButton);
+    const app = readFileSync(join(here, "../src/pwa/companion_app.js"), "utf8");
+    const fnStart = app.indexOf("matchWeaponRows(unit)");
+    const fnEnd = app.indexOf("missionName()", fnStart);
+    const fn = app.slice(fnStart, fnEnd);
+    assert.equal(fn.includes("isOwnUnit"), false);
+    assert.match(fn, /weaponRowsFromModels\(cached\)/);
+    assert.match(fn, /weaponRowsFromModels\(profiles\)/);
 });
 
 check("roster datasheet colors stay off the match screen", () => {
@@ -519,6 +530,10 @@ check("roster datasheet colors stay off the match screen", () => {
     const gameStart = xml.indexOf('t-name="wh40k_companion.GameScreen"');
     const gameEnd = xml.indexOf('t-name="wh40k_companion.MatchResultScreen"');
     const game = xml.slice(gameStart, gameEnd);
+    assert.match(
+        game,
+        /Кнопка «Оружие» показывает выбранное оружие отряда на вашем ростере и у противника/
+    );
     assert.match(game, /t-call="wh40k_companion\.DatasheetModal"/);
     assert.equal(game.includes("RosterDatasheetModal"), false);
     assert.equal(game.includes("wh40k-roster-char"), false);

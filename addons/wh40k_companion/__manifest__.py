@@ -1,6 +1,6 @@
 {
     "name": "WH40k Battle Companion",
-    "version": "20.0.1.30.0",
+    "version": "20.0.1.31.0",
     "category": "Games",
     "summary": "Warhammer 40,000 roster import, matchmaking via QR, and in-game tracking",
     "description": """
@@ -11,6 +11,8 @@ create matches with QR join codes, and track wounds during games.
 
 Battle App is a standalone PWA at /wh40k/app with JSON API under /wh40k/api/.
 
+20.0.1.31.0 highlights:
+- Both armies in a match have an Оружие button on each unit. Either player opens the chosen weapons (name, range, A, skill, S, AP, D). Empty stored stats stay empty, including Storm Shield. Those lines are on /wh40k/api/match/state and /wh40k/api/match/watch for both players. A wound delta stays a line snapshot.
 20.0.1.30.0 highlights:
 - The opponent sees the same army-rule body, detachment rule body, and stratagem name, CP, and WHEN/TARGET/EFFECT as the list owner. That text is on both roster details, /wh40k/api/match/state, and /wh40k/api/match/watch.
 20.0.1.29.0 highlights:

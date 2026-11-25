@@ -619,7 +619,30 @@ class Wh40kMatch(models.Model):
         return True
 
     # Datasheet columns the opponent card already shows. Own units use the same keys.
+    # Chosen weapons use the same payload for both armies. A wound delta stays a line snapshot.
     UNIT_PROFILE_FIELDS = ("M", "T", "Sv", "W", "LD", "OC", "InSv")
+
+    def _stat_text(self, value):
+        if value in (None, False):
+            return ""
+        return value
+
+    def _weapon_lines(self, model):
+        """Chosen weapons. Empty stored stats stay empty, including a shield."""
+        return [
+            {
+                "name": weapon.name or "",
+                "weapon_type": weapon.weapon_type or "",
+                "range": self._stat_text(weapon.range),
+                "A": self._stat_text(weapon.attacks),
+                "skill": self._stat_text(weapon.skill),
+                "S": self._stat_text(weapon.strength),
+                "AP": self._stat_text(weapon.ap),
+                "D": self._stat_text(weapon.damage),
+                "keywords": self._stat_text(weapon.keywords),
+            }
+            for weapon in model.weapon_ids
+        ]
 
     def _unit_profiles_by_id(self):
         """Characteristic rows for every line in this match.
@@ -642,7 +665,7 @@ class Wh40kMatch(models.Model):
         if not unit_ids:
             return grouped
         units = self.env["wh40k.unit"].sudo().browse(unit_ids)
-        units.mapped("model_ids")
+        units.mapped("model_ids.weapon_ids")
         for unit in units:
             grouped[unit.id] = [
                 {
@@ -656,6 +679,7 @@ class Wh40kMatch(models.Model):
                     "LD": model.leadership or "",
                     "OC": model.objective_control or "",
                     "InSv": model.invuln_save or "",
+                    "weapons": self._weapon_lines(model),
                 }
                 for model in unit.model_ids
             ]
