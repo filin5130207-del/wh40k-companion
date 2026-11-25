@@ -544,6 +544,7 @@
 }
 
 .wh40k-readonly-hint {
+    display: block;
     margin-top: 0.4rem;
     font-size: 0.75rem;
 }
@@ -593,6 +594,32 @@
 .wh40k-unit-chars {
     margin-top: 0.2rem;
     font-size: 0.8rem;
+}
+
+.wh40k-weapon-block {
+    margin-top: 0.45rem;
+    font-size: 0.78rem;
+}
+
+.wh40k-weapon-line {
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+    margin-top: 0.28rem;
+}
+
+.wh40k-weapon-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.wh40k-weapon-stats {
+    line-height: 1.35;
+}
+
+.wh40k-weapon-model {
+    margin-top: 0.35rem;
+    color: var(--wh40k-muted);
 }
 
 .wh40k-char-panel,

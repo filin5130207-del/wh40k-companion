@@ -77,6 +77,35 @@ class TestRosterTextImport(Wh40kPlayerMixin, TransactionCase):
         logan = next(unit for unit in owner["units"] if unit["name"] == "Logan Grimnar")
         self.assertEqual(logan["models"][0]["M"], '6"')
         self.assertEqual(logan["models"][0]["W"], "8")
+        axe = next(
+            weapon
+            for weapon in logan["models"][0]["weapons"]
+            if weapon["name"] == "Axe Morkai – strike"
+        )
+        self.assertTrue(axe["A"])
+        self.assertTrue(axe["S"])
+        self.assertTrue(axe["D"])
+
+        def storm_shield(payload):
+            return next(
+                weapon
+                for unit in payload["units"]
+                if unit["name"] == "Wolf Guard Terminators"
+                for model in unit["models"]
+                for weapon in model["weapons"]
+                if weapon["name"].lower() == "storm shield"
+            )
+
+        shield = storm_shield(owner)
+        for key in ("range", "A", "skill", "S", "AP", "D"):
+            self.assertFalse(shield[key])
+        opp_shield = storm_shield(opponent)
+        self.assertEqual(opp_shield["name"].lower(), "storm shield")
+        for key in ("range", "A", "skill", "S", "AP", "D"):
+            self.assertFalse(opp_shield[key])
+        self.assertNotIn('"when"', state_blob)
+        self.assertNotIn('"target"', state_blob)
+        self.assertNotIn('"effect"', state_blob)
         self.assertNotIn(
             "description",
             rule_for_viewer(

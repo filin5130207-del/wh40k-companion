@@ -29,6 +29,7 @@ import {
     emptyJoinState,
     unitCharacteristicLines as linesForProfiles,
     modelCharacteristicLine as lineForModel,
+    weaponRowsFromModels,
     charScope,
     toggleSquadCharacteristics,
     toggleModelCharacteristics,
@@ -291,6 +292,34 @@ export class Wh40kCompanionApp extends Component {
         return !!(this.state.openModels && this.state.openModels[this.squadKey(unit)]);
     }
 
+    weaponKey(unit) {
+        if (!unit) {
+            return "";
+        }
+        if (unit.line_id) {
+            return "line-" + unit.line_id;
+        }
+        if (unit.unit_id != null && !Array.isArray(unit.models)) {
+            return "unit-" + unit.unit_id;
+        }
+        return "roster-" + (unit.id != null ? unit.id : unit.unit_id || "");
+    }
+
+    weaponsOpen(unit) {
+        const key = this.weaponKey(unit);
+        return !!key && !!(this.state.openWeapons && this.state.openWeapons[key]);
+    }
+
+    toggleWeapons(unit) {
+        const key = this.weaponKey(unit);
+        if (!key) {
+            return;
+        }
+        const openWeapons = { ...(this.state.openWeapons || {}) };
+        openWeapons[key] = !openWeapons[key];
+        this.state.openWeapons = openWeapons;
+    }
+
     toggleSquadChars(unit) {
         this.state.openChars = toggleSquadCharacteristics(
             this.state.openChars,
@@ -389,23 +418,20 @@ export class Wh40kCompanionApp extends Component {
         return "wh40k-result-loss";
     }
 
-    weaponLabel(w) {
-        return (
-            " | " +
-            (w.weapon_type || "-") +
-            " | R " +
-            (w.range || "-") +
-            " | A " +
-            (w.A || "-") +
-            " | " +
-            (w.skill || "-") +
-            " | S " +
-            (w.S || "-") +
-            " | AP " +
-            (w.AP || "-") +
-            " | D " +
-            (w.D || "-")
-        );
+    rosterWeaponRows(unit) {
+        return weaponRowsFromModels(unit && unit.models, true);
+    }
+
+    weaponRowsForModel(model) {
+        return weaponRowsFromModels(model ? [model] : [], true);
+    }
+
+    matchWeaponRows(unit) {
+        if (!this.isOwnUnit(unit)) {
+            return [];
+        }
+        const detail = this.findUnitDetail(unit);
+        return weaponRowsFromModels(detail && detail.models, true);
     }
 
     missionName() {

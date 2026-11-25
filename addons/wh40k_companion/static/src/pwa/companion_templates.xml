@@ -174,7 +174,7 @@
             </div>
             <button type="button" class="wh40k-btn" t-on-click="this.closeRosterDetail">Назад</button>
         </div>
-        <p class="wh40k-swipe-hint">Как в матче: список юнитов и даташит по нажатию. Иконка § переключает юниты / правила армии. Без -W / -M / Destroy.</p>
+        <p class="wh40k-swipe-hint">Как в матче: список юнитов и даташит по нажатию. Кнопка «Оружие» показывает выбранное оружие отряда. Иконка § переключает юниты / правила армии. Без -W / -M / Destroy.</p>
     </section>
 
     <section class="wh40k-panel wh40k-roster-detail-pane" t-if="this.state.rosterDetail">
@@ -213,11 +213,27 @@
         </t>
         <t t-else="">
             <t t-foreach="this.rosterDetailUnits" t-as="unit" t-key="unit.id">
-                <div class="wh40k-unit-card wh40k-unit-readonly"
-                     t-on-click="() => this.openDatasheet(unit)">
-                    <strong t-out="unit.name"/>
-                    <div class="wh40k-muted" t-out="this.rosterUnitLabel(unit)"/>
-                    <div class="wh40k-muted wh40k-readonly-hint">Даташит · без изменения состояния</div>
+                <div class="wh40k-unit-card wh40k-unit-readonly">
+                    <button type="button" class="wh40k-squad-hit" t-on-click="() => this.openDatasheet(unit)">
+                        <strong t-out="unit.name"/>
+                        <span class="wh40k-muted wh40k-squad-status" t-out="this.rosterUnitLabel(unit)"/>
+                        <span class="wh40k-muted wh40k-readonly-hint">Даташит · без изменения состояния</span>
+                    </button>
+                    <div class="wh40k-unit-actions">
+                        <button type="button" class="wh40k-btn"
+                                t-att-class="{'active': this.weaponsOpen(unit)}"
+                                t-att-aria-expanded="this.weaponsOpen(unit) ? 'true' : 'false'"
+                                t-on-click.stop="() => this.toggleWeapons(unit)">
+                            Оружие
+                        </button>
+                    </div>
+                    <t t-if="this.weaponsOpen(unit)">
+                        <div class="wh40k-char-panel" t-on-click.stop="">
+                            <t t-set="weaponRows" t-value="this.rosterWeaponRows(unit)"/>
+                            <t t-call="wh40k_companion.WeaponLines"/>
+                            <p t-if="!this.rosterWeaponRows(unit).length" class="wh40k-muted">Нет оружия.</p>
+                        </div>
+                    </t>
                 </div>
             </t>
             <p t-if="!this.rosterDetailUnits.length" class="wh40k-muted">Нет юнитов в ростере.</p>
@@ -390,7 +406,20 @@
                     t-on-click.stop="() => this.toggleModels(unit)">
                 Модели
             </button>
+            <button t-if="this.isOwnUnit(unit)" type="button" class="wh40k-btn"
+                    t-att-class="{'active': this.weaponsOpen(unit)}"
+                    t-att-aria-expanded="this.weaponsOpen(unit) ? 'true' : 'false'"
+                    t-on-click.stop="() => this.toggleWeapons(unit)">
+                Оружие
+            </button>
         </div>
+        <t t-if="this.isOwnUnit(unit) and this.weaponsOpen(unit)">
+            <div class="wh40k-char-panel" t-on-click.stop="">
+                <t t-set="weaponRows" t-value="this.matchWeaponRows(unit)"/>
+                <t t-call="wh40k_companion.WeaponLines"/>
+                <p t-if="!this.matchWeaponRows(unit).length" class="wh40k-muted">Нет оружия.</p>
+            </div>
+        </t>
         <t t-if="this.charsOpen(unit)">
             <div class="wh40k-char-panel" t-on-click.stop="">
                 <t t-foreach="this.unitCharacteristicLines(unit)" t-as="charLine" t-key="charLine_index">
@@ -452,7 +481,7 @@
             </div>
         </div>
         <p class="wh40k-muted" t-out="this.missionName()"/>
-        <p class="wh40k-swipe-hint">Свайп влево/вправо или вкладки — ваш ростер ↔ противник. Иконка § переключает юниты и правила. Нажатие на отряд показывает характеристики всех его моделей. Нажатие на модель в списке «Модели» показывает только её характеристики. «Модели» меняет каждую миниатюру: +M, −M, +W, −W, уничтожить, отменить. Это могут делать оба игрока.</p>
+        <p class="wh40k-swipe-hint">Свайп влево/вправо или вкладки — ваш ростер ↔ противник. Иконка § переключает юниты и правила. На вашем ростере кнопка «Оружие» показывает выбранное оружие отряда. Нажатие на отряд показывает характеристики всех его моделей. Нажатие на модель в списке «Модели» показывает только её характеристики. «Модели» меняет каждую миниатюру: +M, −M, +W, −W, уничтожить, отменить. Это могут делать оба игрока.</p>
     </section>
 
     <div class="wh40k-game" t-att-data-side="this.state.gameSide">
@@ -626,16 +655,26 @@
                             <td t-out="model.W"/><td t-out="model.LD"/><td t-out="model.OC"/><td t-out="model.InSv"/>
                         </tr>
                     </table>
-                    <t t-foreach="model.weapons || []" t-as="w" t-key="w.name">
-                        <div>
-                            <strong t-out="w.name"/>
-                            <span class="wh40k-muted" t-out="this.weaponLabel(w)"/>
-                        </div>
-                    </t>
+                    <t t-set="weaponRows" t-value="this.weaponRowsForModel(model)"/>
+                    <t t-call="wh40k_companion.WeaponLines"/>
                 </t>
             </div>
         </div>
     </t>
+</t>
+
+<t t-name="wh40k_companion.WeaponLines">
+    <div class="wh40k-weapon-block" t-if="weaponRows and weaponRows.length">
+        <t t-foreach="weaponRows" t-as="weapon" t-key="weapon.key">
+            <div t-if="weapon.model" class="wh40k-weapon-model" t-out="weapon.model"/>
+            <div class="wh40k-weapon-line">
+                <span class="wh40k-weapon-name" t-out="weapon.name"/>
+                <span class="wh40k-muted wh40k-weapon-stats">
+                    Range <t t-out="weapon.range"/> · A <t t-out="weapon.attacks"/> · Skill <t t-out="weapon.skill"/> · S <t t-out="weapon.strength"/> · AP <t t-out="weapon.ap"/> · D <t t-out="weapon.damage"/>
+                </span>
+            </div>
+        </t>
+    </div>
 </t>
 
 <t t-name="wh40k_companion.RosterDatasheetModal">
@@ -668,12 +707,8 @@
                             <td class="wh40k-roster-char-value" t-out="model.InSv"/>
                         </tr>
                     </table>
-                    <t t-foreach="model.weapons || []" t-as="w" t-key="w.name">
-                        <div>
-                            <strong t-out="w.name"/>
-                            <span class="wh40k-muted" t-out="this.weaponLabel(w)"/>
-                        </div>
-                    </t>
+                    <t t-set="weaponRows" t-value="this.weaponRowsForModel(model)"/>
+                    <t t-call="wh40k_companion.WeaponLines"/>
                 </t>
             </div>
         </div>
