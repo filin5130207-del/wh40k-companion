@@ -419,19 +419,24 @@ export class Wh40kCompanionApp extends Component {
     }
 
     rosterWeaponRows(unit) {
-        return weaponRowsFromModels(unit && unit.models, true);
+        return weaponRowsFromModels(unit && unit.models);
     }
 
     weaponRowsForModel(model) {
-        return weaponRowsFromModels(model ? [model] : [], true);
+        return weaponRowsFromModels(model ? [model] : []);
     }
 
     matchWeaponRows(unit) {
-        if (!this.isOwnUnit(unit)) {
-            return [];
-        }
         const detail = this.findUnitDetail(unit);
-        return weaponRowsFromModels(detail && detail.models, true);
+        const cached = (detail && detail.models) || [];
+        if (cached.some((model) => model && (model.weapons || []).length)) {
+            return weaponRowsFromModels(cached);
+        }
+        const profiles = (unit && unit.profiles) || [];
+        if (profiles.some((model) => model && (model.weapons || []).length)) {
+            return weaponRowsFromModels(profiles);
+        }
+        return weaponRowsFromModels(cached);
     }
 
     missionName() {

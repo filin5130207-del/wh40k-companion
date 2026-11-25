@@ -588,12 +588,9 @@ export function weaponStatCells(weapon) {
 /**
  * One row per chosen weapon on the unit's models.
  * A second model name is shown only when that model has its own weapons.
- * ``ownArmy`` false hides the block. The roster tab passes true.
+ * Own army and the opponent use the same rows. Empty stats stay empty.
  */
-export function weaponRowsFromModels(models, ownArmy = true) {
-    if (!ownArmy) {
-        return [];
-    }
+export function weaponRowsFromModels(models) {
     const list = Array.isArray(models) ? models : [];
     const armed = list.filter((model) => model && (model.weapons || []).length);
     const multi = armed.length > 1;

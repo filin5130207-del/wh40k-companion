@@ -25,7 +25,7 @@ class TestWh40kDrawAndUnitProfiles(Wh40kPlayerMixin, TransactionCase):
     def test_own_unit_payload_matches_opponent_characteristics(self):
         host_roster = self._make_tiny_roster(self.user_a, name="Host Chars")
         guest_roster = self._make_tiny_roster(self.user_b, name="Guest Chars")
-        self._stamp_model(
+        host_model = self._stamp_model(
             host_roster,
             movement='6"',
             toughness="5",
@@ -35,7 +35,7 @@ class TestWh40kDrawAndUnitProfiles(Wh40kPlayerMixin, TransactionCase):
             objective_control="2",
             invuln_save="4+",
         )
-        self._stamp_model(
+        guest_model = self._stamp_model(
             guest_roster,
             movement='5"',
             toughness="4",
@@ -44,6 +44,26 @@ class TestWh40kDrawAndUnitProfiles(Wh40kPlayerMixin, TransactionCase):
             leadership="7+",
             objective_control="1",
             invuln_save="",
+        )
+        self.env["wh40k.weapon"].sudo().create(
+            {
+                "name": "Bolt rifle",
+                "model_id": host_model.id,
+                "weapon_type": "ranged",
+                "range": '24"',
+                "attacks": "2",
+                "skill": "3+",
+                "strength": "4",
+                "ap": "-1",
+                "damage": "1",
+            }
+        )
+        self.env["wh40k.weapon"].sudo().create(
+            {
+                "name": "Storm Shield",
+                "model_id": guest_model.id,
+                "weapon_type": "melee",
+            }
         )
         match = self._activate_match(
             self.user_a, self.user_b, host_roster, guest_roster
@@ -69,9 +89,32 @@ class TestWh40kDrawAndUnitProfiles(Wh40kPlayerMixin, TransactionCase):
         guest_own = guest_view["unit_state"]["guest"][0]
         self.assertEqual(set(guest_own["profiles"][0]), set(opponent["profiles"][0]))
         self.assertEqual(guest_own["profiles"][0]["T"], "4")
-        # Wound deltas stay a line snapshot. Characteristics ride the full state.
+        bolt = own["profiles"][0]["weapons"][0]
+        self.assertEqual(bolt["name"], "Bolt rifle")
+        self.assertEqual(bolt["range"], '24"')
+        self.assertEqual(bolt["A"], "2")
+        self.assertEqual(bolt["D"], "1")
+        shield = opponent["profiles"][0]["weapons"][0]
+        self.assertEqual(shield["name"], "Storm Shield")
+        for key in ("range", "A", "skill", "S", "AP", "D"):
+            self.assertEqual(shield[key], "")
+        self.assertEqual(
+            guest_view["unit_state"]["host"][0]["profiles"][0]["weapons"][0]["name"],
+            "Bolt rifle",
+        )
+        watched = match.watch_payload(
+            self.user_b.partner_id,
+            since_write_date="2000-01-01 00:00:00",
+            since_rev=0,
+            wait=False,
+        )
+        watched_shield = watched["match"]["unit_state"]["guest"][0]["profiles"][0]["weapons"][0]
+        self.assertEqual(watched_shield["name"], "Storm Shield")
+        self.assertEqual(watched_shield["A"], "")
+        # Wound deltas stay a line snapshot. Characteristics and weapons ride the full state.
         host_line = match.unit_line_ids.filtered(lambda line: line.side == "host")[:1]
         self.assertNotIn("profiles", host_line.to_state_entry())
+        self.assertNotIn("weapons", host_line.to_state_entry())
 
     def test_host_cancel_payload_leaves_the_waiting_screen(self):
         host_roster = self._make_tiny_roster(self.user_a, name="Host Cancel")
