@@ -379,8 +379,19 @@
     return { base: bits[0] || "", mode: bits.slice(1).join(" "), hunter };
   }
 
+  function compareBase(base) {
+    // Drop a leading count and one trailing plural so "2 Lascannons"
+    // lines up with the catalogue profile. The count stays on the gear line.
+    let text = String(base || "").replace(/^\d+\s+/, "").trim();
+    if (text.length > 3 && text.endsWith("s") && !text.endsWith("ss")) {
+      text = text.slice(0, -1);
+    }
+    return text;
+  }
+
   function sameWeapon(a, b) {
-    return a.base === b.base && a.mode === b.mode && a.hunter === b.hunter && a.base.length > 0;
+    const base = compareBase(a.base);
+    return base === compareBase(b.base) && a.mode === b.mode && a.hunter === b.hunter && base.length > 0;
   }
 
   function matchByName(list, raw, nameOf) {
@@ -477,12 +488,32 @@
     }
     const enh = (enhancements || []).find((row) => norm(row.name) === norm(name));
     if (enh) return { status: "enhancement", enhancement: { name: enh.name, points: enh.points, detachmentId: enh.detachmentId } };
-    if (unit && key.mode === "" && !key.hunter && key.base) {
-      const family = (unit.weapons || []).filter((weapon) => weaponKey(weapon.name).base === key.base && !weaponKey(weapon.name).hunter);
+    const compared = compareBase(key.base);
+    if (unit && key.mode === "" && !key.hunter && compared) {
+      const family = (unit.weapons || []).filter(
+        (weapon) => compareBase(weaponKey(weapon.name).base) === compared && !weaponKey(weapon.name).hunter
+      );
       if (family.length > 1) return { status: "modes", weapons: family };
       if (family.length === 1) return { status: "weapon", weapon: family[0] };
     }
     return { status: "unmatched" };
+  }
+
+  function isWeaponMatch(match) {
+    return match && (match.status === "weapon" || match.status === "modes");
+  }
+
+  // A gear bullet that names two weapons becomes two lines. A profile whose
+  // own name contains "and" stays one line. A shield-only line has no "and".
+  function expandCombinedGear(item, datasheet, enhancements) {
+    if (item.kind !== "gear" || item.isModel) return [item];
+    const name = String(item.name || "").trim();
+    const parts = name.split(/\s+and\s+/i).map((part) => part.trim()).filter(Boolean);
+    if (parts.length !== 2) return [item];
+    if (isWeaponMatch(matchGear(name, datasheet, enhancements))) return [item];
+    const sides = parts.map((part) => matchGear(part, datasheet, enhancements));
+    if (!sides.some((side) => isWeaponMatch(side))) return [item];
+    return parts.map((part) => ({ ...item, name: part, raw: part }));
   }
 
   function matchRoster(parsed, index) {
@@ -510,7 +541,8 @@
     }
     const units = (parsed.units || []).map((unit) => {
       const datasheet = matchUnit(unit.name, pool, index);
-      const items = (unit.items || []).map((item) => {
+      const expanded = (unit.items || []).flatMap((item) => expandCombinedGear(item, datasheet, enhancements));
+      const items = expanded.map((item) => {
         if (item.kind === "annotation" || item.isModel) return { ...item, match: null };
         if (item.kind === "enhancement") {
           const found = enhancements.find((enh) => norm(enh.name) === norm(item.name));

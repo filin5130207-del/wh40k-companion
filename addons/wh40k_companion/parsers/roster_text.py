@@ -448,12 +448,26 @@ def weapon_key(name) -> dict:
     return {"base": bits[0] if bits else "", "mode": " ".join(bits[1:]), "hunter": hunter}
 
 
+def _compare_base(base: str) -> str:
+    """Drop a leading count and one trailing plural.
+
+    ``2 Lascannons`` and ``Twin Heavy Bolters`` then line up with the
+    catalogue profiles Lascannon and Twin heavy bolter. The count stays on
+    the gear line; only the comparison ignores it.
+    """
+    text = re.sub(r"^\d+\s+", "", str(base or "")).strip()
+    if len(text) > 3 and text.endswith("s") and not text.endswith("ss"):
+        return text[:-1]
+    return text
+
+
 def same_weapon(left, right) -> bool:
+    base = _compare_base(left["base"])
     return (
-        left["base"] == right["base"]
+        base == _compare_base(right["base"])
         and left["mode"] == right["mode"]
         and left["hunter"] == right["hunter"]
-        and len(left["base"]) > 0
+        and len(base) > 0
     )
 
 
@@ -571,11 +585,12 @@ def match_gear(name, unit, enhancements) -> dict:
                     "detachmentId": row.get("detachmentId"),
                 },
             }
-    if unit and key["mode"] == "" and not key["hunter"] and key["base"]:
+    compared = _compare_base(key["base"])
+    if unit and key["mode"] == "" and not key["hunter"] and compared:
         family = [
             weapon
             for weapon in unit.get("weapons") or []
-            if weapon_key(weapon.get("name"))["base"] == key["base"]
+            if _compare_base(weapon_key(weapon.get("name"))["base"]) == compared
             and not weapon_key(weapon.get("name"))["hunter"]
         ]
         if len(family) > 1:
@@ -583,6 +598,37 @@ def match_gear(name, unit, enhancements) -> dict:
         if len(family) == 1:
             return {"status": "weapon", "weapon": family[0]}
     return {"status": "unmatched"}
+
+
+_AND_SPLIT_RE = re.compile(r"\s+and\s+", re.I)
+
+
+def _is_weapon_match(match: dict) -> bool:
+    return match.get("status") in ("weapon", "modes")
+
+
+def expand_combined_gear(item, datasheet, enhancements) -> list[dict]:
+    """Split a gear bullet on ``and`` into two lines.
+
+    The joined name stays one line when it is itself a catalogue profile
+    (``Teeth and claws``, ``Tyrnak and Fenrir``). Otherwise it splits when
+    at least one side is a catalogue weapon, so ``Lasgun`` is not hidden
+    beside a banner that has no weapon profile. A shield-only line has no
+    ``and`` and stays a single unmatched line. Counts written on a side
+    stay on that side (``2 Lascannons``).
+    """
+    if item.get("kind") != "gear" or item.get("isModel"):
+        return [item]
+    name = str(item.get("name") or "").strip()
+    parts = [part.strip() for part in _AND_SPLIT_RE.split(name) if part.strip()]
+    if len(parts) != 2:
+        return [item]
+    if _is_weapon_match(match_gear(name, datasheet, enhancements)):
+        return [item]
+    side_matches = [match_gear(part, datasheet, enhancements) for part in parts]
+    if not any(_is_weapon_match(side) for side in side_matches):
+        return [item]
+    return [{**item, "name": part, "raw": part} for part in parts]
 
 
 def match_roster(parsed, index) -> dict:
@@ -613,7 +659,10 @@ def match_roster(parsed, index) -> dict:
     for unit in parsed.get("units") or []:
         datasheet = match_unit(unit.get("name"), pool, index)
         items = []
+        expanded = []
         for item in unit.get("items") or []:
+            expanded.extend(expand_combined_gear(item, datasheet, enhancements))
+        for item in expanded:
             if item.get("kind") == "annotation" or item.get("isModel"):
                 items.append({**item, "match": None})
                 continue
