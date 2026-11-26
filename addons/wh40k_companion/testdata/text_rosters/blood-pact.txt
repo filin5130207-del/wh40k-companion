@@ -1,0 +1,138 @@
+BLOOD PACT HEAVY BATTLE GROUP(2000 points)
+
+Astra Militarum
+Bridgehead Strike (1 Detachment Point)
+Steel Hammer (2 Detachment Points)
+Strike Force (2000 points)
+Force Disposition: Priority Assets
+
+ATTACHED UNITS
+
+Attached unit 1
+Lord Solar Leontus (120 points)
+  • Warlord
+  • Attached as: Leader (Character)
+  • Sol's Righteous Gaze
+  • Conquest
+  • Konstantin's Hooves
+Cadian Command Squad (60 points)
+  • Attached as: Leader (Character)
+  • 2x Lasgun
+  • Lasgun and Regimental Standard
+  • Plasma Gun and Close Combat Weapon
+  • 2x Plasma Pistol
+  • 3x Close Combat Weapon
+  • Power Fist
+Cadian Shock Troops (70 points)
+  • Attached as: Bodyguard (Battleline)
+  • Bolt Pistol and Chainsword
+  • 7x Lasgun
+  • Meltagun
+  • Plasma Gun
+  • 9x Close Combat Weapon
+
+CHARACTERS
+
+Gaunt's Ghosts (95 points)
+  • Bolt Pistol
+  • Bragg's Autocannon
+  • Corbec's Hot-Shot Lascarbine
+  • Larkin's Long-Las
+  • Lascarbine
+  • Rawne's Lascarbine
+  • Gaunt's Chainsword
+  • Mkoll's Straight Silver Knife
+  • 4x Straight Silver Knife
+
+Rogal Dorn Commander (290 points)
+  • Heavy Stubber
+  • 2x Meltagun
+  • 2x Multi-Melta
+  • Oppressor Cannon and Coaxial Autocannon
+  • Pulveriser Cannon
+  • Armoured Tracks
+
+Tech-Priest Enginseer (60 points)
+  • Enhancement: Engine Speaker
+  • Mechanicus Pistol
+  • Enginseer Axe
+  • Servo-Arm
+
+Tech-Priest Enginseer (45 points)
+  • Mechanicus Pistol
+  • Enginseer Axe
+  • Servo-Arm
+
+OTHER DATASHEETS
+
+Bullgryn Squad (90 points)
+  • 3x Brute Shield
+  • 3x Bullgryn Maul
+  • 3x Close Combat Weapon
+
+Bullgryn Squad (90 points)
+  • 3x Brute Shield
+  • 3x Bullgryn Maul
+  • 3x Close Combat Weapon
+
+Krieg Combat Engineers (65 points)
+  • Autopistol
+  • 2x Combat Shotgun and Close Combat Weapon
+  • Flamer
+  • Plasma Pistol
+  • Remote Mine
+  • 2x Close Combat Weapon
+  • Power Weapon
+
+Krieg Combat Engineers (65 points)
+  • Autopistol
+  • 2x Combat Shotgun and Close Combat Weapon
+  • Flamer
+  • Plasma Pistol
+  • Remote Mine
+  • 2x Close Combat Weapon
+  • Power Weapon
+
+Tempestus Aquilons (95 points)
+  • 6x Hot-Shot Lascarbine
+  • 3x Hot-Shot Laspistol
+  • Hot-Shot Long-Las
+  • Melta Carbine
+  • Sentry Flamer
+  • 10x Close Combat Weapon
+  • Power Weapon
+
+Stormsword (450 points)
+  • Enhancement: Titan Killer
+  • 2 Lascannons and 2 Twin Heavy Bolters
+  • 2x Lascannon
+  • Stormsword Siege Cannon
+  • Twin Heavy Bolter
+  • 2x Twin Heavy Bolters
+  • Armoured Tracks
+
+Leman Russ Exterminator (160 points)
+  • Exterminator Autocannon
+  • Heavy Flamer
+  • 2x Heavy Flamers
+  • Heavy Stubber
+  • Hunter-Killer Missile
+  • Armoured Tracks
+
+Leman Russ Vanquisher (135 points)
+  • 2x Heavy Bolters
+  • Heavy Stubber
+  • Hunter-Killer Missile
+  • Lascannon
+  • Vanquisher Battle Cannon
+  • Armoured Tracks
+
+Scout Sentinels (55 points)
+  • Hunter-Killer Missile
+  • Lascannon
+  • Sentinel Chainsaw
+
+Scout Sentinels (55 points)
+  • Hunter-Killer Missile
+  • Lascannon
+  • Sentinel Chainsaw

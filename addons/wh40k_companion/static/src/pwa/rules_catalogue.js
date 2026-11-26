@@ -290,17 +290,49 @@
       }
     }
     flush();
-    const parts = preamble.slice();
-    const missionAt = parts.findIndex((part) => isMission(part));
-    if (missionAt >= 0) parsed.mission = parts.splice(missionAt, 1)[0];
-    if (parts.length) {
-      let faction = parts.shift();
-      if (BREADCRUMBS.includes(norm(faction)) && parts.length) faction = parts.shift();
-      parsed.faction = faction;
-      parsed.detachmentNames = parts.flatMap((part) => splitDetachmentLine(part));
-    }
+    applyPreamble(parsed, preamble);
     parsed.units = units;
     return parsed;
+  }
+
+  function applyConfigField(parsed, key) {
+    if (key.key === "faction" && !parsed.faction) parsed.faction = key.value;
+    else if (key.key === "battle size" && !parsed.battleSize) {
+      parsed.battleSize = key.value;
+      if (parsed.limit == null) {
+        const header = unitHeader(key.value);
+        parsed.limit = header ? header.points : parsePts(key.value);
+      }
+    } else if (key.key === "force disposition") parsed.mission = key.value;
+    else if (key.key === "detachment") {
+      parsed.detachmentNames.push(...splitDetachmentLine(key.value));
+    } else if (key.key === "list name" && !parsed.name) parsed.name = key.value;
+  }
+
+  // One Label: value in an official-app preamble is that field (the mission,
+  // when the label is Force Disposition). It is not a detachment.
+  function applyPreamble(parsed, preamble) {
+    const plain = [];
+    for (const line of preamble) {
+      const key = configKey(line);
+      if (key) {
+        applyConfigField(parsed, key);
+        continue;
+      }
+      if (isMission(line) && !parsed.mission) {
+        parsed.mission = line;
+        continue;
+      }
+      plain.push(line);
+    }
+    if (plain.length && !parsed.faction) {
+      let faction = plain.shift();
+      if (BREADCRUMBS.includes(norm(faction)) && plain.length) faction = plain.shift();
+      parsed.faction = faction;
+    } else if (plain.length && BREADCRUMBS.includes(norm(plain[0]))) {
+      plain.shift();
+    }
+    parsed.detachmentNames.push(...plain.flatMap((part) => splitDetachmentLine(part)));
   }
 
   function blankParsed() {
@@ -317,7 +349,14 @@
   }
 
   function hasLabeledConfig(text) {
-    return text.split("\n").some((line) => configKey(line.trim()));
+    // New Recruit keys several lines. One preamble label stays on the official path.
+    let found = 0;
+    for (const line of text.split("\n")) {
+      if (!configKey(line.trim())) continue;
+      found += 1;
+      if (found >= 2) return true;
+    }
+    return false;
   }
 
   function parseRoster(text) {
