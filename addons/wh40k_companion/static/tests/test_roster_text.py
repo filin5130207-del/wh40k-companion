@@ -54,9 +54,12 @@ class RosterTextTest(unittest.TestCase):
         cls.catalogue = load_catalogue()
         cls.gg = RosterTextParser(load("gg.txt"), cls.catalogue).matched()
         cls.auf = RosterTextParser(load("aufsky-drift.txt"), cls.catalogue).matched()
+        cls.pact = RosterTextParser(load("blood-pact.txt"), cls.catalogue).matched()
 
     def test_units_and_detachments_match(self):
+        self.assertEqual(self.gg["meta"]["factionRaw"], "Space Wolves")
         self.assertEqual(self.gg["meta"]["factionId"], "space-wolves")
+        self.assertEqual(self.gg["meta"]["mission"], "Take and Hold")
         self.assertEqual(self.gg["meta"]["armyRule"]["name"], "Combat Doctrines")
         self.assertGreater(len(self.gg["meta"]["armyRule"]["body"]), 40)
         self.assertEqual(
@@ -220,6 +223,103 @@ class RosterTextTest(unittest.TestCase):
         self.assertEqual(shared["rules"][0]["description"], body)
         self.assertEqual(shared["rules"][0]["when"], stratagems[0]["when"])
         self.assertEqual(shared["rules"][0]["effect"], effect)
+
+    def test_blood_pact_stays_on_the_official_path(self):
+        pact = self.pact
+        self.assertEqual(pact["meta"]["name"], "BLOOD PACT HEAVY BATTLE GROUP")
+        self.assertEqual(pact["meta"]["points"], 2000)
+        self.assertEqual(pact["meta"]["limit"], 2000)
+        self.assertEqual(pact["meta"]["factionRaw"], "Astra Militarum")
+        self.assertEqual(pact["meta"]["factionId"], "astra-militarum")
+        self.assertEqual(pact["meta"]["mission"], "Priority Assets")
+        self.assertEqual(pact["meta"]["armyRule"]["name"], "Voice of Command")
+        self.assertGreater(len(pact["meta"]["armyRule"]["body"]), 40)
+        self.assertEqual(
+            [(det["id"], det["ruleName"]) for det in pact["detachments"]],
+            [
+                ("bridgehead-strike", "Fire Zone Purge"),
+                ("steel-hammer", "Ceaseless Cannonade"),
+            ],
+        )
+        self.assertEqual(
+            [strat["name"] for strat in pact["detachments"][0]["stratagems"]],
+            ["On My Position", "Firing Hot", "Servo-Designators"],
+        )
+        self.assertEqual(
+            [strat["name"] for strat in pact["detachments"][1]["stratagems"]],
+            [
+                "Accuracy Under Pressure",
+                "Engine of Wrath",
+                "Withering Firepower",
+                "Shattering Salvo",
+                "Adamantine Behemoth",
+                "Imposing Arrival",
+            ],
+        )
+        self.assertEqual(len(pact["units"]), 17)
+        self.assertTrue(all(unit["datasheetId"] and unit["profiles"] for unit in pact["units"]))
+        priests = [unit for unit in pact["units"] if unit["name"] == "Tech-Priest Enginseer"]
+        self.assertEqual([unit["points"] for unit in priests], [60, 45])
+        self.assertTrue(
+            all(
+                unit["source"] == "astra-militarum" and unit["datasheetId"] == "tech-priest-enginseer"
+                for unit in priests
+            )
+        )
+        speaker = next(item for item in priests[0]["items"] if item["kind"] == "enhancement")
+        self.assertEqual(speaker["name"], "Engine Speaker")
+        self.assertEqual(speaker["match"]["status"], "enhancement")
+        self.assertEqual(speaker["match"]["enhancement"]["detachmentId"], "steel-hammer")
+        stormsword = next(unit for unit in pact["units"] if unit["name"] == "Stormsword")
+        killer = next(item for item in stormsword["items"] if item["kind"] == "enhancement")
+        self.assertEqual(killer["name"], "Titan Killer")
+        self.assertEqual(killer["match"]["status"], "enhancement")
+        self.assertEqual(killer["match"]["enhancement"]["points"], 20)
+
+        for unit in pact["units"]:
+            for item in unit["items"]:
+                if item["kind"] != "gear":
+                    continue
+                self.assertFalse(item["isModel"], unit["name"])
+                self.assertIn(item["match"]["status"], ("weapon", "modes", "unmatched"))
+        combined = next(
+            item for item in stormsword["items"] if item["name"] == "2 Lascannons and 2 Twin Heavy Bolters"
+        )
+        self.assertEqual(combined["kind"], "gear")
+        self.assertFalse(combined["isModel"])
+
+        terminators = next(unit for unit in self.gg["units"] if unit["name"] == "Terminator Squad")
+        self.assertTrue(any(item.get("isModel") and item["name"] == "Terminator" for item in terminators["items"]))
+        nested = [
+            item
+            for item in terminators["items"]
+            if item["kind"] == "gear" and not item.get("isModel")
+        ]
+        self.assertTrue(nested)
+        self.assertTrue(all(item["match"]["status"] == "weapon" for item in nested))
+
+        imported = RosterTextParser(load("blood-pact.txt"), self.catalogue).parse()
+        force = imported["forces"][0]
+        self.assertEqual(force["catalogue_name"], "Astra Militarum")
+        self.assertEqual(force["army_rules"][0]["name"], "Voice of Command")
+        detachments = force["detachments"]
+        self.assertEqual([det["name"] for det in detachments], ["Bridgehead Strike", "Steel Hammer"])
+        for det in detachments:
+            scopes = [rule["rule_scope"] for rule in det["rules"]]
+            self.assertEqual(scopes.count("detachment"), 1)
+            self.assertGreaterEqual(scopes.count("stratagem"), 3)
+        units = detachments[0]["units"]
+        self.assertEqual(len(units), 17)
+        self.assertEqual(detachments[1]["units"], [])
+        imported_priests = [unit for unit in units if unit["name"] == "Tech-Priest Enginseer"]
+        self.assertEqual(len(imported_priests), 2)
+        self.assertTrue(all(unit["models"][0]["toughness"] for unit in imported_priests))
+        self.assertIn("Engine Speaker", [ability["name"] for ability in imported_priests[0]["abilities"]])
+        sword = next(unit for unit in units if unit["name"] == "Stormsword")
+        sword_weapons = [weapon["name"] for model in sword["models"] for weapon in model["weapons"]]
+        self.assertIn("Titan Killer", [ability["name"] for ability in sword["abilities"]])
+        self.assertIn("2 Lascannons and 2 Twin Heavy Bolters", sword_weapons)
+        self.assertTrue(any("Stormsword siege cannon" == name for name in sword_weapons))
 
 
 if __name__ == "__main__":

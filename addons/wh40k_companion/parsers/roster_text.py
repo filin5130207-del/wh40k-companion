@@ -368,25 +368,64 @@ def parse_headerless(text) -> dict:
         elif current:
             current["bullets"].append({"indent": 99, "text": line, "bullet": False})
     flush()
-    parts = list(preamble)
-    mission_at = next((i for i, part in enumerate(parts) if is_mission(part)), -1)
-    if mission_at >= 0:
-        parsed["mission"] = parts.pop(mission_at)
-    if parts:
-        faction = parts.pop(0)
-        if norm(faction) in BREADCRUMBS and parts:
-            faction = parts.pop(0)
-        parsed["faction"] = faction
-        names = []
-        for part in parts:
-            names.extend(split_detachment_line(part))
-        parsed["detachmentNames"] = names
+    _apply_preamble(parsed, preamble)
     parsed["units"] = units
     return parsed
 
 
+def _apply_config_field(parsed, key) -> None:
+    if key["key"] == "faction" and not parsed["faction"]:
+        parsed["faction"] = key["value"]
+    elif key["key"] == "battle size" and not parsed["battleSize"]:
+        parsed["battleSize"] = key["value"]
+        if parsed["limit"] is None:
+            header = unit_header(key["value"])
+            parsed["limit"] = header["points"] if header else parse_pts(key["value"])
+    elif key["key"] == "force disposition":
+        parsed["mission"] = key["value"]
+    elif key["key"] == "detachment":
+        parsed["detachmentNames"].extend(split_detachment_line(key["value"]))
+    elif key["key"] == "list name" and not parsed["name"]:
+        parsed["name"] = key["value"]
+
+
+def _apply_preamble(parsed, preamble) -> None:
+    """Keep unlabeled official-app lines, and read one ``Label: value`` as that field.
+
+    ``Force Disposition: Priority Assets`` is the mission. It is not a detachment
+    and it does not switch the paste onto the New Recruit parser.
+    """
+    plain = []
+    for line in preamble:
+        key = config_key(line)
+        if key:
+            _apply_config_field(parsed, key)
+            continue
+        if is_mission(line) and not parsed["mission"]:
+            parsed["mission"] = line
+            continue
+        plain.append(line)
+    if plain and not parsed["faction"]:
+        faction = plain.pop(0)
+        if norm(faction) in BREADCRUMBS and plain:
+            faction = plain.pop(0)
+        parsed["faction"] = faction
+    elif plain and norm(plain[0]) in BREADCRUMBS:
+        plain.pop(0)
+    for part in plain:
+        parsed["detachmentNames"].extend(split_detachment_line(part))
+
+
 def has_labeled_config(text) -> bool:
-    return any(config_key(line.strip()) for line in text.split("\n"))
+    """New Recruit keys several lines. One preamble label stays on the official path."""
+    found = 0
+    for line in text.split("\n"):
+        if not config_key(line.strip()):
+            continue
+        found += 1
+        if found >= 2:
+            return True
+    return False
 
 
 def parse_roster(text) -> dict:

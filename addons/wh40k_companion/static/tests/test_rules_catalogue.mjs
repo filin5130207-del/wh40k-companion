@@ -234,6 +234,39 @@ check("a non-space-wolves list resolves against its own book", () => {
     assert.notEqual(gear.match.status, "unmatched");
 });
 
+check("blood pact official paste keeps the unlabeled preamble", () => {
+    const pact = run("blood-pact.txt");
+    assert.equal(pact.meta.factionRaw, "Astra Militarum");
+    assert.equal(pact.meta.factionId, "astra-militarum");
+    assert.equal(pact.meta.mission, "Priority Assets");
+    assert.equal(pact.meta.armyRule.name, "Voice of Command");
+    assert.deepEqual(
+        pact.detachments.map((det) => det.id),
+        ["bridgehead-strike", "steel-hammer"]
+    );
+    assert.ok(pact.detachments.every((det) => det.ruleBody && det.stratagems.length >= 3));
+    assert.equal(pact.units.length, 17);
+    assert.ok(pact.units.every((unit) => unit.datasheetId));
+    const priests = pact.units.filter((unit) => unit.name === "Tech-Priest Enginseer");
+    assert.equal(priests.length, 2);
+    assert.ok(priests.every((unit) => unit.source === "astra-militarum"));
+    const speaker = priests[0].items.find((item) => item.kind === "enhancement");
+    assert.equal(speaker.match.status, "enhancement");
+    assert.equal(speaker.match.enhancement.name, "Engine Speaker");
+    const stormsword = pact.units.find((unit) => unit.name === "Stormsword");
+    const killer = stormsword.items.find((item) => item.kind === "enhancement");
+    assert.equal(killer.match.enhancement.name, "Titan Killer");
+    assert.ok(pact.units.every((unit) => unit.items.every((item) => item.kind !== "gear" || !item.isModel)));
+    const gg = run("gg.txt");
+    const terminators = gg.units.find((unit) => unit.name === "Terminator Squad");
+    assert.ok(terminators.items.some((item) => item.isModel && item.name === "Terminator"));
+    assert.ok(
+        terminators.items
+            .filter((item) => item.kind === "gear" && !item.isModel)
+            .every((item) => item.match.status === "weapon")
+    );
+});
+
 check("same datasheet name stays on the roster faction", () => {
     const templars = catalogue.factions.find((faction) => faction.id === "black-templars");
     const own = templars.units.find((unit) => unit.name === "Gladiator Lancer");
