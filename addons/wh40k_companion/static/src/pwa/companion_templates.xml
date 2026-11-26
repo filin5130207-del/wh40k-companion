@@ -150,14 +150,41 @@
         <p class="wh40k-muted">JSON NewRecruit / Battlescribe или текст official app и New Recruit. Сначала превью, затем подтверждение. Правила армии видны вам. Нажмите ростер, чтобы открыть юниты и правила (только просмотр).</p>
         <div class="wh40k-list">
             <t t-foreach="this.state.rosters" t-as="roster" t-key="roster.id">
-                <button type="button" class="wh40k-list-item"
-                        t-on-click="() => this.openRosterDetail(roster.id)"
-                        t-att-disabled="this.state.busy">
-                    <div>
-                        <strong t-out="roster.name"/>
-                        <div class="wh40k-muted" t-out="roster.points_used + ' / ' + roster.points_limit + ' pts | ' + roster.unit_count + ' units'"/>
-                    </div>
-                </button>
+                <div class="wh40k-list-item wh40k-roster-row">
+                    <t t-if="this.state.rosterRenameId === roster.id">
+                        <input class="wh40k-input wh40k-roster-rename"
+                               type="text"
+                               t-att-value="this.state.rosterRenameName"
+                               t-on-input="this.onRosterRenameInput"
+                               t-on-keydown="this.onRosterRenameKey"
+                               t-att-disabled="this.state.busy"
+                               aria-label="Название ростера"/>
+                        <div class="wh40k-roster-actions">
+                            <button type="button" class="wh40k-btn wh40k-btn-primary"
+                                    t-on-click="() => this.saveRosterRename(roster.id)"
+                                    t-att-disabled="this.state.busy">Сохранить</button>
+                            <button type="button" class="wh40k-btn"
+                                    t-on-click="this.cancelRosterRename"
+                                    t-att-disabled="this.state.busy">Отмена</button>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <button type="button" class="wh40k-roster-open"
+                                t-on-click="() => this.openRosterDetail(roster.id)"
+                                t-att-disabled="this.state.busy">
+                            <strong t-out="roster.name"/>
+                            <div class="wh40k-muted" t-out="roster.points_used + ' / ' + roster.points_limit + ' pts | ' + roster.unit_count + ' units'"/>
+                        </button>
+                        <div class="wh40k-roster-actions">
+                            <button type="button" class="wh40k-btn"
+                                    t-on-click="() => this.startRosterRename(roster)"
+                                    t-att-disabled="this.state.busy">Переименовать</button>
+                            <button type="button" class="wh40k-btn wh40k-btn-danger"
+                                    t-on-click="() => this.deleteRoster(roster)"
+                                    t-att-disabled="this.state.busy">Удалить</button>
+                        </div>
+                    </t>
+                </div>
             </t>
         </div>
         <p t-if="!this.state.rosters.length" class="wh40k-muted">Нет ростеров. Импортируйте testdata/aufychi.json.</p>

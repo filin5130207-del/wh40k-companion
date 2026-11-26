@@ -246,6 +246,45 @@ class TestWh40kHttpApi(HttpCase):
         self.assertTrue(detail.get("ok"), detail)
         self.assertTrue(detail["roster"]["units"])
 
+    def test_roster_rename_and_delete_are_owner_only(self):
+        self.authenticate(self.user_b.login, self.password)
+        stolen = self._jsonrpc(
+            f"/wh40k/api/roster/{self.roster_a.id}/rename",
+            {"name": "Stolen"},
+        )
+        self.assertFalse(stolen.get("ok"))
+        self.assertTrue(stolen.get("error"))
+        denied = self._jsonrpc(
+            f"/wh40k/api/roster/{self.roster_a.id}/delete",
+            {},
+        )
+        self.assertFalse(denied.get("ok"))
+        self.assertTrue(denied.get("error"))
+
+        self.authenticate(self.user_a.login, self.password)
+        blank = self._jsonrpc(
+            f"/wh40k/api/roster/{self.roster_a.id}/rename",
+            {"name": "   "},
+        )
+        self.assertFalse(blank.get("ok"))
+        renamed = self._jsonrpc(
+            f"/wh40k/api/roster/{self.roster_a.id}/rename",
+            {"name": "  Http Renamed  "},
+        )
+        self.assertTrue(renamed.get("ok"), renamed)
+        self.assertEqual(renamed["roster"]["name"], "Http Renamed")
+        deleted = self._jsonrpc(
+            f"/wh40k/api/roster/{self.roster_a.id}/delete",
+            {},
+        )
+        self.assertTrue(deleted.get("ok"), deleted)
+        self.assertEqual(deleted.get("roster_id"), self.roster_a.id)
+        gone = self._jsonrpc(
+            f"/wh40k/api/roster/{self.roster_a.id}/detail",
+            {},
+        )
+        self.assertFalse(gone.get("ok"))
+
     def test_match_cancel_and_stranger_state_denied(self):
         self.authenticate(self.user_a.login, self.password)
         created = self._jsonrpc(

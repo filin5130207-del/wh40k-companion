@@ -83,6 +83,47 @@ export function filterEligibleRosters(rosters, pointsLimit) {
     return (rosters || []).filter((r) => (r.points_used || 0) <= limit);
 }
 
+/** Trim a roster title. Empty means the rename should not be saved. */
+export function cleanRosterName(name) {
+    return String(name == null ? "" : name).trim();
+}
+
+export function renameRosterInList(rosters, rosterId, name) {
+    const cleaned = cleanRosterName(name);
+    const id = Number(rosterId);
+    return (rosters || []).map((roster) => {
+        if (!roster || Number(roster.id) !== id || !cleaned) {
+            return roster;
+        }
+        return { ...roster, name: cleaned };
+    });
+}
+
+export function removeRosterFromList(rosters, rosterId) {
+    const id = Number(rosterId);
+    return (rosters || []).filter((roster) => roster && Number(roster.id) !== id);
+}
+
+/** Russian confirm copy shown before an owner deletes a roster. */
+export function rosterDeletePrompt(name) {
+    const label = cleanRosterName(name) || "этот ростер";
+    return `Удалить ростер «${label}»? Это нельзя отменить.`;
+}
+
+const ROSTER_ACTION_ERRORS = {
+    "Only the roster owner can change it.": "Только владелец может изменить этот ростер.",
+    "Roster name is required.": "Введите название ростера.",
+    "Roster not found.": "Ростер не найден.",
+    "This roster is used in a match and cannot be deleted.":
+        "Этот ростер участвует в матче, удалить его нельзя.",
+};
+
+/** Player-facing text for a rename or delete failure. */
+export function rosterActionError(error, fallback) {
+    const message = error && error.message ? String(error.message) : "";
+    return ROSTER_ACTION_ERRORS[message] || message || fallback;
+}
+
 export function snapshotUnit(unit) {
     return {
         models_remaining: unit.models_remaining,
@@ -821,6 +862,8 @@ export function createInitialState(initialJoinToken = "") {
             win_rate: 0,
         },
         rosters: [],
+        rosterRenameId: null,
+        rosterRenameName: "",
         rosterDetail: null,
         rosterDetailPaneMode: "units",
         missions: [],

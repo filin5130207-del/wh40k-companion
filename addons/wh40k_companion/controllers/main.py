@@ -497,6 +497,21 @@ class Wh40kCompanionController(http.Controller):
             raise UserError("Roster not found.")
         return self._ok(roster=roster.to_detail_dict(partner))
 
+    def _api_roster_rename(self, roster_id, name=None, **kwargs):
+        partner = self._partner()
+        roster = request.env["wh40k.roster"].browse(int(roster_id))
+        if not roster.exists():
+            raise UserError("Roster not found.")
+        return self._ok(roster=roster.rename_for_owner(partner, name))
+
+    def _api_roster_delete(self, roster_id, **kwargs):
+        partner = self._partner()
+        roster = request.env["wh40k.roster"].browse(int(roster_id))
+        if not roster.exists():
+            raise UserError("Roster not found.")
+        roster.unlink_for_owner(partner)
+        return self._ok(roster_id=int(roster_id))
+
     def _wrap(self, fn, *args, **kwargs):
         try:
             return fn(*args, **kwargs)
@@ -625,6 +640,24 @@ class Wh40kCompanionController(http.Controller):
     )
     def api_roster_detail(self, roster_id, **kwargs):
         return self._wrap(self._api_roster_detail, roster_id, **kwargs)
+
+    @http.route(
+        "/wh40k/api/roster/<int:roster_id>/rename",
+        type="jsonrpc",
+        auth="user",
+        methods=["POST"],
+    )
+    def api_roster_rename(self, roster_id, name=None, **kwargs):
+        return self._wrap(self._api_roster_rename, roster_id, name=name, **kwargs)
+
+    @http.route(
+        "/wh40k/api/roster/<int:roster_id>/delete",
+        type="jsonrpc",
+        auth="user",
+        methods=["POST"],
+    )
+    def api_roster_delete(self, roster_id, **kwargs):
+        return self._wrap(self._api_roster_delete, roster_id, **kwargs)
 
     # ---- legacy aliases (same handlers) ---------------------------------------
     @http.route("/wh40k/rules/catalogue", type="jsonrpc", auth="user")

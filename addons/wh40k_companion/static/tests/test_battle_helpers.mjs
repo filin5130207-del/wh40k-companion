@@ -699,6 +699,63 @@ check("nextLinesRev only moves forward", () => {
     assert.equal(mod.nextLinesRev(undefined, 1), 1);
 });
 
+check("owner roster rename and delete stay on that list", () => {
+    const state = mod.createInitialState();
+    assert.equal(state.rosterRenameId, null);
+    assert.equal(state.rosterRenameName, "");
+    assert.equal(mod.cleanRosterName("  Ауфичи  "), "Ауфичи");
+    assert.equal(mod.cleanRosterName("   "), "");
+    assert.equal(mod.cleanRosterName(null), "");
+
+    const rosters = [
+        { id: 1, name: "Старое", points_used: 100 },
+        { id: 2, name: "Чужой", points_used: 50 },
+    ];
+    const renamed = mod.renameRosterInList(rosters, 1, "  Новое имя  ");
+    assert.equal(renamed[0].name, "Новое имя");
+    assert.equal(renamed[1].name, "Чужой");
+    assert.equal(rosters[0].name, "Старое");
+    assert.equal(mod.renameRosterInList(rosters, 1, "   ")[0].name, "Старое");
+
+    const left = mod.removeRosterFromList(renamed, "1");
+    assert.deepEqual(left.map((row) => row.id), [2]);
+    assert.equal(mod.removeRosterFromList(left, 9).length, 1);
+    assert.equal(
+        mod.rosterDeletePrompt("Ауфичи"),
+        "Удалить ростер «Ауфичи»? Это нельзя отменить."
+    );
+    assert.match(mod.rosterDeletePrompt("  "), /этот ростер/);
+    assert.equal(
+        mod.rosterActionError(
+            new Error("This roster is used in a match and cannot be deleted."),
+            "Не удалось удалить ростер."
+        ),
+        "Этот ростер участвует в матче, удалить его нельзя."
+    );
+    assert.equal(
+        mod.rosterActionError(new Error("Only the roster owner can change it.")),
+        "Только владелец может изменить этот ростер."
+    );
+    assert.equal(
+        mod.rosterActionError(new Error(""), "Не удалось удалить ростер."),
+        "Не удалось удалить ростер."
+    );
+
+    const xml = readFileSync(join(here, "../src/pwa/companion_templates.xml"), "utf8");
+    const start = xml.indexOf('t-name="wh40k_companion.RostersScreen"');
+    const end = xml.indexOf('t-name="wh40k_companion.RosterDetailScreen"');
+    const screen = xml.slice(start, end);
+    assert.match(screen, /Переименовать/);
+    assert.match(screen, /Удалить/);
+    assert.match(screen, /Сохранить/);
+    assert.match(screen, /Отмена/);
+    assert.match(screen, /this\.deleteRoster\(roster\)/);
+    assert.match(screen, /this\.saveRosterRename\(roster\.id\)/);
+    assert.match(screen, /this\.openRosterDetail\(roster\.id\)/);
+    const css = readFileSync(join(here, "../src/pwa/companion.css"), "utf8");
+    assert.match(css, /\.wh40k-roster-actions/);
+});
+
 check("rememberJoinToken / clear", () => {
     const mem = new Map();
     const storage = {

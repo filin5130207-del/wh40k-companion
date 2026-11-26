@@ -1,4 +1,4 @@
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from .common import Wh40kPlayerMixin
@@ -64,3 +64,31 @@ class TestWh40kRosterModel(Wh40kPlayerMixin, TransactionCase):
         # Unrelated player still blocked
         with self.assertRaises(AccessError):
             host_roster.check_detail_access(self.user_stranger.partner_id)
+
+    def test_owner_rename_and_delete(self):
+        roster = self._make_tiny_roster(self.user_a, name="Rename Me")
+        renamed = roster.with_user(self.user_a).rename_for_owner(
+            self.user_a.partner_id, "  New Name  "
+        )
+        self.assertEqual(renamed["name"], "New Name")
+        self.assertEqual(roster.name, "New Name")
+        with self.assertRaises(UserError):
+            roster.rename_for_owner(self.user_a.partner_id, "   ")
+        self.assertEqual(roster.name, "New Name")
+        with self.assertRaises(AccessError):
+            roster.unlink_for_owner(self.user_b.partner_id)
+        with self.assertRaises(AccessError):
+            roster.rename_for_owner(self.user_b.partner_id, "Stolen")
+        self.assertEqual(roster.name, "New Name")
+        self.assertTrue(roster.exists())
+        roster.with_user(self.user_a).unlink_for_owner(self.user_a.partner_id)
+        self.assertFalse(roster.exists())
+
+    def test_cannot_delete_roster_used_in_match(self):
+        host_roster = self._make_tiny_roster(self.user_a, name="Locked Host")
+        guest_roster = self._make_tiny_roster(self.user_b, name="Locked Guest")
+        self._activate_match(self.user_a, self.user_b, host_roster, guest_roster)
+        with self.assertRaises(UserError):
+            host_roster.with_user(self.user_a).unlink_for_owner(self.user_a.partner_id)
+        self.assertTrue(host_roster.exists())
+        self.assertEqual(host_roster.name, "Locked Host")

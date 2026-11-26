@@ -10,6 +10,11 @@ import {
     parseOdooDatetime,
     createBattleStore,
     filterEligibleRosters,
+    cleanRosterName,
+    renameRosterInList,
+    removeRosterFromList,
+    rosterDeletePrompt,
+    rosterActionError,
     snapshotUnit,
     pushUndoEntry,
     popUndoEntry,
@@ -514,6 +519,96 @@ export class Wh40kCompanionApp extends Component {
         this.state.datasheet = null;
         this.state.rosterDetailPaneMode = "units";
         this.setScreen("rosters");
+    }
+
+    startRosterRename(roster) {
+        if (!roster || roster.id == null) {
+            return;
+        }
+        this.state.error = "";
+        this.state.rosterRenameId = roster.id;
+        this.state.rosterRenameName = roster.name || "";
+    }
+
+    onRosterRenameInput(ev) {
+        this.state.rosterRenameName = ev.target.value;
+    }
+
+    onRosterRenameKey(ev) {
+        if (ev.key === "Enter") {
+            ev.preventDefault();
+            this.saveRosterRename(this.state.rosterRenameId);
+        } else if (ev.key === "Escape") {
+            ev.preventDefault();
+            this.cancelRosterRename();
+        }
+    }
+
+    cancelRosterRename() {
+        this.state.rosterRenameId = null;
+        this.state.rosterRenameName = "";
+    }
+
+    async saveRosterRename(rosterId) {
+        const name = cleanRosterName(this.state.rosterRenameName);
+        if (rosterId == null) {
+            return;
+        }
+        if (!name) {
+            this.setError("Введите название ростера.");
+            return;
+        }
+        try {
+            this.state.busy = true;
+            const data = await this.rpc(`${API}/roster/${rosterId}/rename`, { name });
+            const saved = (data.roster && data.roster.name) || name;
+            this.state.rosters = renameRosterInList(this.state.rosters, rosterId, saved);
+            if (
+                this.state.rosterDetail &&
+                Number(this.state.rosterDetail.id) === Number(rosterId)
+            ) {
+                this.state.rosterDetail.name = saved;
+            }
+            if (this._rosterCache && this._rosterCache[rosterId]) {
+                this._rosterCache[rosterId].name = saved;
+            }
+            this.cancelRosterRename();
+            this.state.busy = false;
+        } catch (e) {
+            this.setError(rosterActionError(e, "Не удалось переименовать ростер."));
+        }
+    }
+
+    async deleteRoster(roster) {
+        if (!roster || roster.id == null) {
+            return;
+        }
+        if (!window.confirm(rosterDeletePrompt(roster.name))) {
+            return;
+        }
+        try {
+            this.state.busy = true;
+            await this.rpc(`${API}/roster/${roster.id}/delete`);
+            this.state.rosters = removeRosterFromList(this.state.rosters, roster.id);
+            if (Number(this.state.create.roster_id) === Number(roster.id)) {
+                this.state.create.roster_id = null;
+            }
+            if (
+                this.state.rosterDetail &&
+                Number(this.state.rosterDetail.id) === Number(roster.id)
+            ) {
+                this.state.rosterDetail = null;
+            }
+            if (this._rosterCache) {
+                delete this._rosterCache[roster.id];
+            }
+            if (Number(this.state.rosterRenameId) === Number(roster.id)) {
+                this.cancelRosterRename();
+            }
+            this.state.busy = false;
+        } catch (e) {
+            this.setError(rosterActionError(e, "Не удалось удалить ростер."));
+        }
     }
 
     toggleRosterDetailPaneMode() {
