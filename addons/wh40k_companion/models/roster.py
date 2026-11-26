@@ -117,6 +117,51 @@ class Wh40kRoster(models.Model):
             raise AccessError("You cannot view this roster.")
         return True
 
+    def _require_owner(self, partner):
+        """Rename and delete are owner-only, including for managers."""
+        self.ensure_one()
+        if not partner or self.partner_id.id != partner.id:
+            raise AccessError("Only the roster owner can change it.")
+        return True
+
+    def rename_for_owner(self, partner, name):
+        self.ensure_one()
+        self._require_owner(partner)
+        cleaned = str(name or "").strip()
+        if not cleaned:
+            raise UserError("Roster name is required.")
+        self.write({"name": cleaned})
+        return self.to_list_dict()
+
+    def unlink_for_owner(self, partner):
+        self.ensure_one()
+        self._require_owner(partner)
+        if self._used_by_match():
+            raise UserError("This roster is used in a match and cannot be deleted.")
+        self.unlink()
+        return True
+
+    def _used_by_match(self):
+        """True when a match still points at this roster or one of its units."""
+        self.ensure_one()
+        Match = self.env["wh40k.match"].sudo()
+        if Match.search_count(
+            [
+                "|",
+                ("host_roster_id", "=", self.id),
+                ("guest_roster_id", "=", self.id),
+            ]
+        ):
+            return True
+        units = self.force_ids.detachment_ids.unit_ids
+        if not units:
+            return False
+        return bool(
+            self.env["wh40k.match.unit.line"].sudo().search_count(
+                [("unit_id", "in", units.ids)]
+            )
+        )
+
     def rules_payload(self):
         """Army, detachment, and stratagem text for either player.
 
