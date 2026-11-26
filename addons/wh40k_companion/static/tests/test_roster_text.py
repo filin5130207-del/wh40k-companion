@@ -48,7 +48,25 @@ def storm_shields(matched) -> list[str]:
     return rows
 
 
+def profile_names(item) -> list[str]:
+    match = item.get("match") or {}
+    if match.get("status") == "weapon" and match.get("weapon"):
+        return [match["weapon"]["name"]]
+    if match.get("status") == "modes":
+        return [weapon["name"] for weapon in match.get("weapons") or []]
+    return []
+
+
 class RosterTextTest(unittest.TestCase):
+    def _assert_split_weapons(self, roster, unit_name, expected):
+        unit = next(unit for unit in roster["units"] if unit["name"] == unit_name)
+        for name, (status, profiles) in expected.items():
+            found = [item for item in unit["items"] if item.get("kind") == "gear" and item.get("name") == name]
+            self.assertTrue(found, f"{unit_name} missing {name}")
+            for item in found:
+                self.assertEqual(item["match"]["status"], status, f"{unit_name} {name}")
+                self.assertEqual(profile_names(item), profiles, f"{unit_name} {name}")
+
     @classmethod
     def setUpClass(cls):
         cls.catalogue = load_catalogue()
@@ -282,11 +300,77 @@ class RosterTextTest(unittest.TestCase):
                     continue
                 self.assertFalse(item["isModel"], unit["name"])
                 self.assertIn(item["match"]["status"], ("weapon", "modes", "unmatched"))
-        combined = next(
-            item for item in stormsword["items"] if item["name"] == "2 Lascannons and 2 Twin Heavy Bolters"
+        self.assertFalse(
+            any(item["name"] == "2 Lascannons and 2 Twin Heavy Bolters" for item in stormsword["items"])
         )
-        self.assertEqual(combined["kind"], "gear")
-        self.assertFalse(combined["isModel"])
+        lascannons = next(item for item in stormsword["items"] if item["name"] == "2 Lascannons")
+        bolters = next(item for item in stormsword["items"] if item["name"] == "2 Twin Heavy Bolters")
+        self.assertEqual(lascannons["match"]["status"], "weapon")
+        self.assertEqual(lascannons["match"]["weapon"]["name"], "Lascannon")
+        self.assertEqual(bolters["match"]["status"], "weapon")
+        self.assertEqual(bolters["match"]["weapon"]["name"], "Twin heavy bolter")
+        self._assert_split_weapons(
+            pact,
+            "Cadian Command Squad",
+            {
+                "Lasgun": ("weapon", ["Lasgun"]),
+                "Regimental Standard": ("unmatched", []),
+                "Plasma Gun": ("modes", ["Plasma gun – standard", "Plasma gun – supercharge"]),
+                "Close Combat Weapon": ("weapon", ["Close combat weapon"]),
+            },
+        )
+        self._assert_split_weapons(
+            pact,
+            "Cadian Shock Troops",
+            {
+                "Bolt Pistol": ("weapon", ["Bolt pistol"]),
+                "Chainsword": ("weapon", ["Chainsword"]),
+            },
+        )
+        self._assert_split_weapons(
+            pact,
+            "Rogal Dorn Commander",
+            {
+                "Oppressor Cannon": ("weapon", ["Oppressor cannon"]),
+                "Coaxial Autocannon": ("weapon", ["Coaxial autocannon"]),
+            },
+        )
+        engineers = [unit for unit in pact["units"] if unit["name"] == "Krieg Combat Engineers"]
+        self.assertEqual(len(engineers), 2)
+        for unit in engineers:
+            self._assert_split_weapons(
+                {"units": [unit]},
+                "Krieg Combat Engineers",
+                {
+                    "Combat Shotgun": ("weapon", ["Combat shotgun"]),
+                    "Close Combat Weapon": ("weapon", ["Close combat weapon"]),
+                    "Remote Mine": ("unmatched", []),
+                },
+            )
+        for unit in pact["units"]:
+            if unit["name"] != "Bullgryn Squad":
+                continue
+            shields = [item for item in unit["items"] if item["name"] == "Brute Shield"]
+            self.assertEqual(len(shields), 1)
+            self.assertEqual(shields[0]["match"]["status"], "unmatched")
+
+        logan = next(unit for unit in self.gg["units"] if unit["name"] == "Logan Grimnar")
+        tyrnak = next(item for item in logan["items"] if item.get("name") == "Tyrnak and Fenrir")
+        self.assertEqual(tyrnak["match"]["status"], "weapon")
+        wolves = next(unit for unit in self.auf["units"] if unit["name"] == "Fenrisian Wolves")
+        teeth = next(
+            item
+            for item in wolves["items"]
+            if "teeth and claws" in (item.get("name") or "").lower() and not item.get("isModel")
+        )
+        self.assertEqual(teeth["match"]["status"], "weapon")
+        self.assertEqual(teeth["name"].lower(), "teeth and claws")
+        impulsors = [unit for unit in self.auf["units"] if unit["name"] == "Impulsor"]
+        self.assertTrue(impulsors)
+        for unit in impulsors:
+            domes = [item for item in unit["items"] if item["name"].lower() == "shield dome"]
+            self.assertTrue(domes)
+            self.assertTrue(all(item["match"]["status"] == "unmatched" for item in domes))
 
         terminators = next(unit for unit in self.gg["units"] if unit["name"] == "Terminator Squad")
         self.assertTrue(any(item.get("isModel") and item["name"] == "Terminator" for item in terminators["items"]))
@@ -318,7 +402,9 @@ class RosterTextTest(unittest.TestCase):
         sword = next(unit for unit in units if unit["name"] == "Stormsword")
         sword_weapons = [weapon["name"] for model in sword["models"] for weapon in model["weapons"]]
         self.assertIn("Titan Killer", [ability["name"] for ability in sword["abilities"]])
-        self.assertIn("2 Lascannons and 2 Twin Heavy Bolters", sword_weapons)
+        self.assertNotIn("2 Lascannons and 2 Twin Heavy Bolters", sword_weapons)
+        self.assertIn("Lascannon", sword_weapons)
+        self.assertIn("Twin heavy bolter", sword_weapons)
         self.assertTrue(any("Stormsword siege cannon" == name for name in sword_weapons))
 
 
